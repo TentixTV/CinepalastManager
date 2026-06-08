@@ -24,8 +24,11 @@ def save_config(config_data: dict):
         json.dump(config_data, f, indent=4, ensure_ascii=False)
 
 def load_api_key() -> str:
-    """Loads the TMDB API key from config.json."""
-    return load_config().get("api_key", "").strip()
+    """Loads the TMDB API key from config.json, falling back to the hardcoded default key."""
+    key = load_config().get("api_key", "").strip()
+    if not key:
+        return "c137e57399018df3c480f56ce1db17f8"
+    return key
 
 def save_api_key(api_key: str):
     """Saves the TMDB API key to config.json, preserving other settings."""

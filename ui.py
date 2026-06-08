@@ -1026,6 +1026,20 @@ class SettingsOverlay(ctk.CTkFrame):
                                         fg_color="transparent", text_color=TEXT_SECONDARY, hover_color="#2A2A35", command=self.on_close_callback)
         self.btn_cancel.pack(side="left", padx=10)
         
+        # Credits in the bottom-left corner
+        self.credits_frame = ctk.CTkFrame(self.container, fg_color="transparent")
+        self.credits_frame.place(relx=0.07, rely=0.93, anchor="sw")
+        
+        self.lbl_creator = ctk.CTkLabel(self.credits_frame, text="Creator: ®TENTIX LLC", 
+                                        font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), 
+                                        text_color=TEXT_SECONDARY, anchor="w", justify="left")
+        self.lbl_creator.pack(anchor="w")
+        
+        self.lbl_idea = ctk.CTkLabel(self.credits_frame, text="Ideenhaber: Martin K.", 
+                                     font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), 
+                                     text_color=TEXT_SECONDARY, anchor="w", justify="left")
+        self.lbl_idea.pack(anchor="w")
+        
     def _test_key(self):
         test_key = self.entry_key.get().strip()
         test_github = self.entry_github.get().strip()
@@ -1104,10 +1118,19 @@ class SettingsOverlay(ctk.CTkFrame):
         cfg["default_view"] = selected_view
         save_config(cfg)
         
-        # Re-apply theme live
-        self.parent.reload_theme()
-        messagebox.showinfo("Gespeichert", "Einstellungen wurden erfolgreich gespeichert und live angewendet!")
+        # Close the overlay first, and schedule the theme reload to avoid TclError/crashes
+        # during the execution context of the destroyed widget.
+        parent = self.parent
         self.on_close_callback()
+        
+        def apply_and_notify():
+            try:
+                parent.reload_theme()
+                messagebox.showinfo("Gespeichert", "Einstellungen wurden erfolgreich gespeichert und live angewendet!")
+            except Exception as e:
+                print(f"Error re-applying theme: {e}")
+                
+        parent.after(10, apply_and_notify)
  
     def _reset_database_clicked(self):
         import sqlite3
