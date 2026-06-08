@@ -2,6 +2,7 @@ import os
 import json
 import requests
 import urllib.parse
+import re
 from bs4 import BeautifulSoup
 from typing import List, Dict, Optional
 
@@ -81,35 +82,86 @@ class TMDBClient:
     def search_movies(self, query: str) -> List[Dict]:
         """
         Searches TMDB for movies by title query.
-        Returns a list of search results.
+        Uses TMDB API key if configured; otherwise, scrapes TMDB public search website.
         """
         api_key = self.get_api_key()
-        if not api_key:
-            raise ValueError("Kein TMDB API-Schlüssel konfiguriert.")
+        if api_key:
+            try:
+                url = f"{self.BASE_URL}/search/movie"
+                headers, params = self._get_auth(api_key)
+                params.update({
+                    "query": query,
+                    "language": "de-DE",
+                    "page": 1
+                })
+                response = requests.get(url, headers=headers, params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                
+                results = []
+                for item in data.get("results", []):
+                    release_date = item.get("release_date", "")
+                    year = release_date.split("-")[0] if release_date else "k.A."
+                    results.append({
+                        "tmdb_id": item["id"],
+                        "titel": item["title"],
+                        "original_titel": item.get("original_title", ""),
+                        "jahr": year,
+                        "poster_path": item.get("poster_path")
+                    })
+                return results
+            except Exception as e:
+                print(f"API search failed (falling back to web scraping): {e}")
 
-        url = f"{self.BASE_URL}/search/movie"
-        headers, params = self._get_auth(api_key)
-        params.update({
-            "query": query,
-            "language": "de-DE",
-            "page": 1
-        })
-        
-        response = requests.get(url, headers=headers, params=params, timeout=10)
+        # Web Scraper Fallback (no API Key required)
+        escaped_query = urllib.parse.quote(query)
+        url = f"https://www.themoviedb.org/search?query={escaped_query}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
+        }
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
-        data = response.json()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        cards = soup.find_all("div", class_="comp:media-card")
         
         results = []
-        for item in data.get("results", []):
-            release_date = item.get("release_date", "")
-            year = release_date.split("-")[0] if release_date else "k.A."
-            results.append({
-                "tmdb_id": item["id"],
-                "titel": item["title"],
-                "original_titel": item.get("original_title", ""),
-                "jahr": year,
-                "poster_path": item.get("poster_path")
-            })
+        for card in cards:
+            link = card.find("a", href=True)
+            if link:
+                href = link["href"]
+                match = re.search(r'^/movie/(\d+)', href)
+                if match:
+                    tmdb_id = int(match.group(1))
+                    
+                    title_el = card.find("h2")
+                    title = title_el.text.strip() if title_el else ""
+                    if not title:
+                        title = link.text.strip()
+                        
+                    year_el = card.find("span", class_="release_date")
+                    year_str = year_el.text.strip() if year_el else ""
+                    year = None
+                    year_match = re.search(r'\b(19\d\d|20\d\d)\b', year_str)
+                    if year_match:
+                        year = int(year_match.group(1))
+                        
+                    poster_path = ""
+                    img = card.find("img")
+                    if img:
+                        src = img.get("src") or img.get("data-src") or ""
+                        img_match = re.search(r'/t/p/w[^/]+/([^/]+\.(?:jpg|png|webp|jpeg))', src)
+                        if img_match:
+                            poster_path = "/" + img_match.group(1)
+                            
+                    results.append({
+                        "tmdb_id": tmdb_id,
+                        "titel": title,
+                        "original_titel": title,
+                        "jahr": year if year else "k.A.",
+                        "poster_path": poster_path
+                    })
         return results
 
     def scrape_synchronsprecher(self, title: str, year: Optional[int] = None) -> str:
@@ -191,6 +243,150 @@ class TMDBClient:
             
         return ""
 
+    def _scrape_movie_page(self, tmdb_id: int) -> Dict:
+        """
+        Scrapes a movie detail page directly from the public TMDb website.
+        """
+        url = f"https://www.themoviedb.org/movie/{tmdb_id}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        title = ""
+        year = None
+        title_h2 = soup.find("h2")
+        if title_h2:
+            title_a = title_h2.find("a")
+            if title_a:
+                title = title_a.text.strip()
+            else:
+                title = title_h2.text.strip()
+                title = re.sub(r'\s*\(\d{4}\)\s*$', '', title)
+                
+            year_span = title_h2.find("span", class_="release_date")
+            if not year_span:
+                year_span = soup.find("span", class_=re.compile("release_date"))
+            if year_span:
+                year_match = re.search(r'\b(19\d\d|20\d\d)\b', year_span.text)
+                if year_match:
+                    year = int(year_match.group(1))
+                    
+        if not title:
+            og_title = soup.find("meta", property="og:title")
+            if og_title:
+                title = og_title.get("content", "").replace(" - The Movie Database (TMDB)", "")
+                
+        overview = ""
+        desc_div = soup.find("div", class_="overview")
+        if desc_div:
+            overview = desc_div.text.strip()
+        if not overview:
+            p_desc = soup.find("p", class_="overview")
+            if p_desc:
+                overview = p_desc.text.strip()
+                
+        genres = []
+        genres_span = soup.find("span", class_="genres")
+        if genres_span:
+            for a in genres_span.find_all("a"):
+                genres.append(a.text.strip())
+        genre_richtung = ", ".join(genres) if genres else "k.A."
+        
+        runtime = 0
+        runtime_span = soup.find("span", class_="runtime")
+        if runtime_span:
+            runtime_text = runtime_span.text.strip()
+            m_match = re.search(r'(\d+)m', runtime_text)
+            h_match = re.search(r'(\d+)h', runtime_text)
+            if h_match:
+                runtime += int(h_match.group(1)) * 60
+            if m_match:
+                runtime += int(m_match.group(1))
+                
+        director = "k.A."
+        crew_list = soup.find_all("li", class_="profile")
+        directors = []
+        for crew in crew_list:
+            role = crew.find("p", class_="character")
+            if role and "Director" in role.text:
+                name = crew.find("a")
+                if name:
+                    directors.append(name.text.strip())
+        if directors:
+            director = ", ".join(directors)
+            
+        actors = []
+        people_ols = soup.find_all("ol", class_=re.compile("people"))
+        for ol in people_ols:
+            cards = ol.find_all("li", class_="card")
+            for card in cards:
+                p_tags = card.find_all("p")
+                if p_tags:
+                    actor_name = p_tags[0].text.strip()
+                    actor_name = " ".join(actor_name.split())
+                    if actor_name and actor_name not in actors:
+                        actors.append(actor_name)
+        schauspieler_cast = ", ".join(actors[:10]) if actors else "k.A."
+        
+        fsk = "k.A."
+        certification_span = soup.find("span", class_="certification")
+        if certification_span:
+            cert = certification_span.text.strip().lower().replace("fsk", "").replace("ab", "").strip()
+            if cert in ["0", "6", "12", "16", "18"]:
+                fsk = cert
+                
+        poster_path = ""
+        poster_meta = soup.find("meta", property="og:image")
+        if poster_meta:
+            content = poster_meta.get("content", "")
+            match = re.search(r'/t/p/[^/]+/([^/]+\.(?:jpg|png|webp|jpeg))', content)
+            if match:
+                poster_path = "/" + match.group(1)
+                
+        backdrop_path = ""
+        all_paths = re.findall(r'/t/p/[^"\')]+', response.text)
+        for p in all_paths:
+            if "face" in p and ("138" in p or "45" in p or "66" in p):
+                continue
+            if "poster_path" in p or "profile_path" in p or "logo_path" in p:
+                continue
+            if poster_path and poster_path in p:
+                continue
+            match = re.search(r'/t/p/(?:w1920_and_h800_multi_faces|original|w1000_and_h450_multi_faces|w1280|w780)/([^/]+\.(?:jpg|png|webp|jpeg))', p)
+            if match:
+                backdrop_path = "/" + match.group(1)
+                break
+                
+        if not backdrop_path:
+            for p in all_paths:
+                if "face" in p:
+                    match = re.search(r'/t/p/[^/]+/([^/]+\.(?:jpg|png|webp|jpeg))', p)
+                    if match:
+                        backdrop_path = "/" + match.group(1)
+                        break
+                        
+        return {
+            "titel": title if title else "Unbekannt",
+            "jahr": year,
+            "schauspieler_cast": schauspieler_cast,
+            "genre_richtung": genre_richtung,
+            "laufzeit_min": runtime,
+            "handlung_beschreibung": overview if overview else "Keine deutsche Beschreibung vorhanden.",
+            "fsk": fsk,
+            "produktionsfirma_studio": "k.A.",
+            "regisseur": director,
+            "filmreihe": "",
+            "produktionsland": "k.A.",
+            "deutsche_synchronsprecher": "",
+            "poster_path": poster_path,
+            "backdrop_path": backdrop_path
+        }
+
     def fetch_movie_preview(self, tmdb_id: int) -> Dict:
         """
         Fetches metadata for previewing a movie without downloading image assets to disk.
@@ -198,7 +394,16 @@ class TMDBClient:
         """
         api_key = self.get_api_key()
         if not api_key:
-            raise ValueError("Kein TMDB API-Schlüssel konfiguriert.")
+            try:
+                details = self._scrape_movie_page(tmdb_id)
+                poster_url = f"{self.IMAGE_BASE_URL}/w500{details['poster_path']}" if details['poster_path'] else ""
+                banner_url = f"{self.IMAGE_BASE_URL}/w1280{details['backdrop_path']}" if details['backdrop_path'] else ""
+                details["poster_url"] = poster_url
+                details["banner_url"] = banner_url
+                details["tmdb_id"] = tmdb_id
+                return details
+            except Exception as e:
+                raise ValueError(f"Fehler beim Scraping der TMDb Movie-Vorschau: {e}")
 
         url = f"{self.BASE_URL}/movie/{tmdb_id}"
         headers, params = self._get_auth(api_key)
@@ -268,7 +473,20 @@ class TMDBClient:
         """
         api_key = self.get_api_key()
         if not api_key:
-            raise ValueError("Kein TMDB API-Schlüssel konfiguriert.")
+            try:
+                details = self._scrape_movie_page(tmdb_id)
+                titel = details["titel"]
+                jahr = details["jahr"]
+                details["deutsche_synchronsprecher"] = self.scrape_synchronsprecher(titel, jahr)
+                
+                details["poster_pfad"] = self.download_and_cache_image(details["poster_path"], tmdb_id, "poster")
+                details["banner_pfad"] = self.download_and_cache_image(details["backdrop_path"], tmdb_id, "banner")
+                
+                del details["poster_path"]
+                del details["backdrop_path"]
+                return details
+            except Exception as e:
+                raise ValueError(f"Fehler beim Scraping der TMDb Movie-Details: {e}")
 
         url = f"{self.BASE_URL}/movie/{tmdb_id}"
         headers, params = self._get_auth(api_key)

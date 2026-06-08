@@ -290,22 +290,29 @@ class MovieCard(ctk.CTkFrame):
                                           fg_color=fsk_bg, text_color=fsk_fg, corner_radius=4, width=42, height=18)
         self.fsk_badge.pack(side="right", anchor="e")
         
-        # Bind clicks to all child widgets
+        # Bind clicks and hover events to all child widgets to absorb parent-child hover transitions
         for widget in [self, self.image_label, self.title_label, self.footer, self.year_label, self.fsk_badge]:
             widget.bind("<Button-1>", self._on_card_click)
-            
-        # Hover animations (Glowing Cyan Border)
-        self.bind("<Enter>", self._on_hover_enter)
-        self.bind("<Leave>", self._on_hover_leave)
+            widget.bind("<Enter>", self._on_hover_enter)
+            widget.bind("<Leave>", self._on_hover_leave)
         
     def _on_card_click(self, event):
         self.on_click_callback(self.movie["id"])
         
     def _on_hover_enter(self, event):
+        if hasattr(self, "_hover_timer") and self._hover_timer:
+            self.after_cancel(self._hover_timer)
+            self._hover_timer = None
         self.configure(border_color=ACCENT_COLOR)
         
     def _on_hover_leave(self, event):
+        if hasattr(self, "_hover_timer") and self._hover_timer:
+            self.after_cancel(self._hover_timer)
+        self._hover_timer = self.after(50, self._perform_hover_leave)
+
+    def _perform_hover_leave(self):
         self.configure(border_color=CARD_BORDER)
+        self._hover_timer = None
 
 
 class OnlineMovieCard(ctk.CTkFrame):
@@ -345,13 +352,12 @@ class OnlineMovieCard(ctk.CTkFrame):
                                     fg_color="#A855F7", text_color="#FFFFFF", corner_radius=4, width=50, height=18)
         self.btn_add.pack(side="right", anchor="e")
         
-        # Bind clicks
+        # Bind clicks and hover events to all child widgets to absorb parent-child hover transitions
         for widget in [self, self.image_label, self.title_label, self.footer, self.year_label, self.btn_add]:
             widget.bind("<Button-1>", self._on_card_click)
+            widget.bind("<Enter>", self._on_hover_enter)
+            widget.bind("<Leave>", self._on_hover_leave)
             
-        self.bind("<Enter>", self._on_hover_enter)
-        self.bind("<Leave>", self._on_hover_leave)
-        
         # Start background poster download
         self._load_poster_async()
         
@@ -392,10 +398,19 @@ class OnlineMovieCard(ctk.CTkFrame):
         self.on_click_callback(self.movie)
         
     def _on_hover_enter(self, event):
+        if hasattr(self, "_hover_timer") and self._hover_timer:
+            self.after_cancel(self._hover_timer)
+            self._hover_timer = None
         self.configure(border_color="#A855F7")
         
     def _on_hover_leave(self, event):
+        if hasattr(self, "_hover_timer") and self._hover_timer:
+            self.after_cancel(self._hover_timer)
+        self._hover_timer = self.after(50, self._perform_hover_leave)
+
+    def _perform_hover_leave(self):
         self.configure(border_color="#3A3A4A")
+        self._hover_timer = None
 
 
 class LoadingOverlay(ctk.CTkFrame):
@@ -470,6 +485,12 @@ class DetailOverlay(ctk.CTkFrame):
         self.detail_poster = get_ctk_image(self.movie.get("poster_pfad"), (200, 290), self.movie.get("titel"), "poster")
         self.poster_label = ctk.CTkLabel(self.left_col, image=self.detail_poster, text="")
         self.poster_label.pack(pady=(0, 15))
+        
+        # Download Banner Button under the poster image
+        self.btn_download_banner = ctk.CTkButton(self.left_col, text="↓ Banner-Download", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+                                                 fg_color=ACCENT_COLOR, text_color="#000000", hover_color=ACCENT_HOVER, height=35,
+                                                 command=self._download_banner_clicked)
+        self.btn_download_banner.pack(fill="x", pady=(0, 15), padx=5)
         
         # Quick info panel under poster
         self.quick_info = ctk.CTkFrame(self.left_col, fg_color="#181822", border_width=1, border_color="#2E2E3A", corner_radius=8)
@@ -574,6 +595,42 @@ class DetailOverlay(ctk.CTkFrame):
     def _delete_clicked(self):
         if messagebox.askyesno("Löschen bestätigen", f"Möchten Sie den Film '{self.movie.get('titel')}' wirklich aus der Bibliothek löschen?"):
             self.on_delete_callback(self.movie["id"])
+
+    def _download_banner_clicked(self):
+        import shutil
+        import re
+        import os
+        from tkinter import messagebox
+        
+        banner_pfad = self.movie.get("banner_pfad", "")
+        if not banner_pfad:
+            messagebox.showwarning("Nicht verfügbar", "Für diesen Film ist kein Banner-Bild vorhanden.")
+            return
+            
+        if not os.path.exists(banner_pfad):
+            messagebox.showwarning("Nicht verfügbar", f"Das Banner-Bild wurde lokal nicht gefunden.\nPfad: {banner_pfad}")
+            return
+            
+        try:
+            # Get Windows Desktop folder path safely
+            desktop_dir = os.path.join(os.environ["USERPROFILE"], "Desktop") if "USERPROFILE" in os.environ else os.path.expanduser("~/Desktop")
+            
+            # Create a clean filename from the movie title
+            clean_title = re.sub(r'[\/\\\:\*\?\"\<\>\|]', '', self.movie.get("titel", "Banner"))
+            clean_title = clean_title.replace(" ", "_")
+            
+            ext = os.path.splitext(banner_pfad)[1]
+            if not ext:
+                ext = ".jpg"
+                
+            dest_filename = f"{clean_title}_banner{ext}"
+            dest_path = os.path.join(desktop_dir, dest_filename)
+            
+            # Copy file
+            shutil.copy2(banner_pfad, dest_path)
+            messagebox.showinfo("Erfolgreich", f"Das Filmbanner wurde auf Ihrem Desktop gespeichert als:\n\n{dest_filename}")
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Fehler beim Speichern des Banners auf dem Desktop: {e}")
 
 
 class UpdateDownloadOverlay(ctk.CTkFrame):
@@ -812,7 +869,9 @@ class SettingsOverlay(ctk.CTkFrame):
         cfg["default_view"] = selected_view
         save_config(cfg)
         
-        messagebox.showinfo("Gespeichert", "Einstellungen wurden erfolgreich gespeichert.\n\nBitte starten Sie die App neu, um alle Änderungen anzuwenden.")
+        # Re-apply theme live
+        self.parent.reload_theme()
+        messagebox.showinfo("Gespeichert", "Einstellungen wurden erfolgreich gespeichert und live angewendet!")
         self.on_close_callback()
  
     def _reset_database_clicked(self):
@@ -964,12 +1023,7 @@ class AddMovieOverlay(ctk.CTkFrame):
         for widget in self.results_scroll.winfo_children():
             widget.destroy()
             
-        # Verify API Key
-        if not self.tmdb_client.get_api_key():
-            err_label = ctk.CTkLabel(self.results_scroll, text="Fehler: Kein TMDB API-Schlüssel hinterlegt!\n"
-                                     "Bitte öffnen Sie die Einstellungen und tragen Sie einen Schlüssel ein.", text_color="#ef4444", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), justify="center")
-            err_label.pack(pady=40)
-            return
+
  
         self.btn_search.configure(state="disabled", text="Lade...")
         self.update()
@@ -1586,8 +1640,74 @@ class CinePalastApp(ctk.CTk):
         self.after(1000, self.check_for_updates_background)
         self.bind_all("<Button-1>", self._on_window_click, add="+")
 
-
+    def reload_theme(self):
+        """Reloads the theme configuration from config.json and updates the GUI live without restarting."""
+        global BG_COLOR, PANEL_COLOR, ACCENT_COLOR, ACCENT_HOVER, CARD_BORDER, IMAGE_CACHE
         
+        # 1. Reload the theme string from config
+        from api import load_config
+        theme_str = "cyan"
+        try:
+            theme_str = load_config().get("theme", "cyan").strip().lower()
+        except Exception:
+            pass
+            
+        # 2. Reset the global colors
+        if theme_str == "cyan":
+            BG_COLOR = "#0B0B0F"
+            PANEL_COLOR = "#15151C"
+            ACCENT_COLOR = "#00F0FF"
+            ACCENT_HOVER = "#00B3C2"
+            CARD_BORDER = "#1E1E26"
+        elif theme_str == "red":
+            BG_COLOR = "#0B0B0F"
+            PANEL_COLOR = "#15151C"
+            ACCENT_COLOR = "#EF4444"
+            ACCENT_HOVER = "#DC2626"
+            CARD_BORDER = "#1E1E26"
+        elif theme_str == "blue":
+            BG_COLOR = "#0B0B0F"
+            PANEL_COLOR = "#15151C"
+            ACCENT_COLOR = "#3B82F6"
+            ACCENT_HOVER = "#2563EB"
+            CARD_BORDER = "#1E1E26"
+        elif theme_str == "purple":
+            BG_COLOR = "#0B0B0F"
+            PANEL_COLOR = "#15151C"
+            ACCENT_COLOR = "#A855F7"
+            ACCENT_HOVER = "#9333EA"
+            CARD_BORDER = "#1E1E26"
+        elif theme_str == "black":
+            BG_COLOR = "#050505"
+            PANEL_COLOR = "#0D0D10"
+            ACCENT_COLOR = "#E0E0E0"
+            ACCENT_HOVER = "#A0A0A0"
+            CARD_BORDER = "#1A1A22"
+            
+        # Update window background
+        self.configure(fg_color=BG_COLOR)
+        
+        # Clear image cache to redraw placeholders in new color
+        IMAGE_CACHE.clear()
+        
+        # Rebuild layout elements
+        if hasattr(self, "top_panel") and self.top_panel.winfo_exists():
+            self.top_panel.destroy()
+        if hasattr(self, "gallery_scroll") and self.gallery_scroll.winfo_exists():
+            self.gallery_scroll.destroy()
+        if hasattr(self, "table_container") and self.table_container.winfo_exists():
+            self.table_container.destroy()
+            
+        self._setup_top_panel()
+        self.gallery_scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self.gallery_scroll.bind("<Configure>", self._on_gallery_resize)
+        
+        # Reset grid col count to force reflow on next configure
+        self.last_width = 0
+        
+        # Re-initialize view mode
+        self._on_view_changed(self.view_mode)
+
     def _load_app_icon(self):
         """Checks the project root for icon.ico or assets/DTB.png and applies it natively."""
         icon_ico = "icon.ico"
@@ -1777,7 +1897,7 @@ class CinePalastApp(ctk.CTk):
             self.refresh_gallery()
             local_matches = self.db_manager.search_movies(query)
             self._show_suggestions(local_matches)
-            if len(query) >= 2 and self.tmdb_client.get_api_key():
+            if len(query) >= 2:
                 self._perform_main_online_search(query)
             else:
                 self.online_movies_list = []
