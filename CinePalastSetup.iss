@@ -32,8 +32,11 @@ Source: "dist\CinePalast.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "assets\DTB.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 ; FSK Icons kopieren (falls beim Build vorhanden)
 Source: "assets\fsk\*"; DestDir: "{app}\assets\fsk"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
-; Hinweis: Gecachte Ordner (assets/) und die Datenbank (cinepalast.db) werden 
-; automatisch im selben Ordner erstellt, in dem die .exe gestartet wird.
+; Datenbank kopieren
+Source: "cinepalast.db"; DestDir: "{app}"; Flags: ignoreversion
+; Gecachte Filmbilder kopieren
+Source: "assets\posters\*"; DestDir: "{app}\assets\posters"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "assets\banners\*"; DestDir: "{app}\assets\banners"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Icons]
 ; Verknüpfung im Startmenü erstellen

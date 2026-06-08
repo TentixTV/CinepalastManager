@@ -243,6 +243,23 @@ def get_ctk_image(path: Optional[str], size: tuple, title: str, img_type: str) -
     return img
 
 
+def bind_mouse_wheel_recursive(widget, scroll_frame):
+    """
+    Recursively binds mouse wheel events on a widget and all its children
+    to trigger scrolling on the specified scroll_frame.
+    """
+    def on_mouse_wheel(event):
+        try:
+            if hasattr(scroll_frame, "_canvas"):
+                scroll_frame._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        except Exception:
+            pass
+
+    widget.bind("<MouseWheel>", on_mouse_wheel, add="+")
+    for child in widget.winfo_children():
+        bind_mouse_wheel_recursive(child, scroll_frame)
+
+
 class MovieCard(ctk.CTkFrame):
     """
     A single movie card widget displayed inside the media gallery.
@@ -474,7 +491,7 @@ class DetailOverlay(ctk.CTkFrame):
         # 3. Content layout (Two columns: Left = Poster and Meta, Right = Core text and description)
         self.grid_frame = ctk.CTkFrame(self.scroll_container, fg_color="transparent")
         self.grid_frame.pack(fill="both", expand=True, padx=10)
-        self.grid_frame.columnconfigure(0, weight=1) # Left col
+        self.grid_frame.columnconfigure(0, weight=1, minsize=260) # Left col
         self.grid_frame.columnconfigure(1, weight=2) # Right col
         
         # --- LEFT COLUMN ---
@@ -486,11 +503,19 @@ class DetailOverlay(ctk.CTkFrame):
         self.poster_label = ctk.CTkLabel(self.left_col, image=self.detail_poster, text="")
         self.poster_label.pack(pady=(0, 15))
         
-        # Download Banner Button under the poster image
-        self.btn_download_banner = ctk.CTkButton(self.left_col, text="↓ Banner-Download", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-                                                 fg_color=ACCENT_COLOR, text_color="#000000", hover_color=ACCENT_HOVER, height=35,
+        # Action buttons frame under poster
+        self.poster_actions = ctk.CTkFrame(self.left_col, fg_color="transparent")
+        self.poster_actions.pack(fill="x", pady=(0, 15))
+        
+        self.btn_download_poster = ctk.CTkButton(self.poster_actions, text="↓ Poster-Download", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                                                 fg_color="transparent", text_color=TEXT_PRIMARY, border_color=CARD_BORDER, border_width=1,
+                                                 hover_color="#2A2A35", height=32, command=self._download_poster_clicked)
+        self.btn_download_poster.pack(fill="x", pady=(0, 5), padx=5)
+        
+        self.btn_download_banner = ctk.CTkButton(self.poster_actions, text="↓ Banner-Download", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                                                 fg_color=ACCENT_COLOR, text_color="#000000", hover_color=ACCENT_HOVER, height=32,
                                                  command=self._download_banner_clicked)
-        self.btn_download_banner.pack(fill="x", pady=(0, 15), padx=5)
+        self.btn_download_banner.pack(fill="x", pady=(5, 0), padx=5)
         
         # Quick info panel under poster
         self.quick_info = ctk.CTkFrame(self.left_col, fg_color="#181822", border_width=1, border_color="#2E2E3A", corner_radius=8)
@@ -568,6 +593,32 @@ class DetailOverlay(ctk.CTkFrame):
                                      text_color=TEXT_PRIMARY, justify="left", wraplength=550)
         self.txt_sync.pack(anchor="w", pady=(0, 20))
         
+        # Discord Embed Share Section
+        self.lbl_discord_title = ctk.CTkLabel(self.right_col, text="Discord Share-Beschreibung", font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"), text_color="#5865F2") # Discord Blue
+        self.lbl_discord_title.pack(anchor="w", pady=(10, 2))
+        
+        # Discord container box
+        self.discord_box = ctk.CTkFrame(self.right_col, fg_color="#2F3136", border_width=1, border_color="#202225", corner_radius=8)
+        self.discord_box.pack(fill="x", pady=(5, 15))
+        
+        # Discord content layout: Left vertical colored strip, right info
+        self.discord_strip = ctk.CTkFrame(self.discord_box, fg_color="#5865F2", width=4, corner_radius=0)
+        self.discord_strip.pack(side="left", fill="y", padx=(0, 10))
+        
+        self.discord_content_frame = ctk.CTkFrame(self.discord_box, fg_color="transparent")
+        self.discord_content_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+        
+        # Generate Discord Text
+        self.discord_text = self._generate_discord_text()
+        
+        self.lbl_discord_preview = ctk.CTkLabel(self.discord_content_frame, text=self.discord_text, font=ctk.CTkFont(family="Consolas", size=11), text_color="#DCDDDE", justify="left", wraplength=480)
+        self.lbl_discord_preview.pack(anchor="w")
+        
+        # Copy Button
+        self.btn_copy_discord = ctk.CTkButton(self.discord_content_frame, text="📋 Discord-Text kopieren", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                                             fg_color="#5865F2", text_color="#FFFFFF", hover_color="#4752C4", height=28, command=self._copy_discord_clicked)
+        self.btn_copy_discord.pack(anchor="e", pady=(8, 0))
+        
         # 4. Action Row at the bottom of the card content
         self.action_row = ctk.CTkFrame(self.right_col, fg_color="transparent")
         self.action_row.pack(fill="x", anchor="w", pady=10)
@@ -581,12 +632,15 @@ class DetailOverlay(ctk.CTkFrame):
                                         fg_color="#ef4444", text_color="#FFFFFF", hover_color="#dc2626", width=120, height=35, command=self._delete_clicked)
         self.btn_delete.pack(side="left")
         
+        # Enable recursive mouse wheel scrolling on all DetailOverlay components
+        bind_mouse_wheel_recursive(self.scroll_container, self.scroll_container)
+        
     def add_quick_info_row(self, label: str, val: str):
         row = ctk.CTkFrame(self.quick_info, fg_color="transparent")
-        row.pack(fill="x", pady=2, padx=5)
-        lbl_field = ctk.CTkLabel(row, text=label, font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color=TEXT_SECONDARY, width=100, anchor="w")
+        row.pack(fill="x", pady=4, padx=8)
+        lbl_field = ctk.CTkLabel(row, text=label, font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color=TEXT_SECONDARY, width=110, anchor="w")
         lbl_field.pack(side="left")
-        lbl_val = ctk.CTkLabel(row, text=val, font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_PRIMARY, wraplength=100, justify="left", anchor="w")
+        lbl_val = ctk.CTkLabel(row, text=val, font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_PRIMARY, wraplength=130, justify="left", anchor="w")
         lbl_val.pack(side="left", fill="x", expand=True)
 
     def _edit_clicked(self):
@@ -631,6 +685,81 @@ class DetailOverlay(ctk.CTkFrame):
             messagebox.showinfo("Erfolgreich", f"Das Filmbanner wurde auf Ihrem Desktop gespeichert als:\n\n{dest_filename}")
         except Exception as e:
             messagebox.showerror("Fehler", f"Fehler beim Speichern des Banners auf dem Desktop: {e}")
+
+    def _download_poster_clicked(self):
+        import shutil
+        import re
+        import os
+        from tkinter import messagebox
+        
+        poster_pfad = self.movie.get("poster_pfad", "")
+        if not poster_pfad:
+            messagebox.showwarning("Nicht verfügbar", "Für diesen Film ist kein Poster-Bild vorhanden.")
+            return
+            
+        if not os.path.exists(poster_pfad):
+            messagebox.showwarning("Nicht verfügbar", f"Das Poster-Bild wurde lokal nicht gefunden.\nPfad: {poster_pfad}")
+            return
+            
+        try:
+            # Get Windows Desktop folder path safely
+            desktop_dir = os.path.join(os.environ["USERPROFILE"], "Desktop") if "USERPROFILE" in os.environ else os.path.expanduser("~/Desktop")
+            
+            # Create a clean filename from the movie title
+            clean_title = re.sub(r'[\/\\\:\*\?\"\<\>\|]', '', self.movie.get("titel", "Poster"))
+            clean_title = clean_title.replace(" ", "_")
+            
+            ext = os.path.splitext(poster_pfad)[1]
+            if not ext:
+                ext = ".jpg"
+                
+            dest_filename = f"{clean_title}_poster{ext}"
+            dest_path = os.path.join(desktop_dir, dest_filename)
+            
+            # Copy file
+            shutil.copy2(poster_pfad, dest_path)
+            messagebox.showinfo("Erfolgreich", f"Das Filmplakat wurde auf Ihrem Desktop gespeichert als:\n\n{dest_filename}")
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Fehler beim Speichern des Plakats auf dem Desktop: {e}")
+
+    def _generate_discord_text(self) -> str:
+        import re
+        titel = self.movie.get("titel", "Unbekannt")
+        jahr = self.movie.get("jahr")
+        jahr_str = f" ({jahr})" if jahr else ""
+        genres = self.movie.get("genre_richtung", "k.A.")
+        laufzeit = self.movie.get("laufzeit_min", 0)
+        fsk = self.movie.get("fsk", "k.A.")
+        regisseur = self.movie.get("regisseur", "k.A.")
+        cast = self.movie.get("schauspieler_cast", "k.A.")
+        if len(cast) > 120:
+            cast = cast[:117] + "..."
+        beschreibung = self.movie.get("handlung_beschreibung", "")
+        if len(beschreibung) > 300:
+            beschreibung = beschreibung[:297] + "..."
+            
+        discord_msg = (
+            f"**🎬 CinePalast Film-Tipp: {titel}{jahr_str}**\n"
+            f"> **Genre:** {genres} | **Laufzeit:** {laufzeit} Min. | **FSK:** ab {fsk}\n"
+            f"> **Regisseur:** {regisseur}\n"
+            f"> **Besetzung:** {cast}\n"
+            f">\n"
+            f"> 📝 **Handlung:**\n"
+            f"> {beschreibung}\n"
+            f">\n"
+            f"> *Gesendet aus dem CinePalast Manager von Mannis Kinopalast*"
+        )
+        return discord_msg
+
+    def _copy_discord_clicked(self):
+        from tkinter import messagebox
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(self.discord_text)
+            self.update() # Keep clipboard alive
+            messagebox.showinfo("Kopiert", "Die Discord-Beschreibung wurde erfolgreich in Ihre Zwischenablage kopiert!")
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Fehler beim Kopieren in die Zwischenablage: {e}")
 
 
 class UpdateDownloadOverlay(ctk.CTkFrame):
@@ -1855,6 +1984,7 @@ class CinePalastApp(ctk.CTk):
                 c = idx % cols
                 card = MovieCard(self.gallery_scroll, m, self._show_movie_details)
                 card.grid(row=r, column=c, padx=8, pady=8, sticky="nsew")
+                bind_mouse_wheel_recursive(card, self.gallery_scroll)
                 
             current_row += (len(self.movies_list) - 1) // cols + 1
 
@@ -1869,6 +1999,7 @@ class CinePalastApp(ctk.CTk):
                 c = idx % cols
                 card = OnlineMovieCard(self.gallery_scroll, m, self._import_online_movie_directly)
                 card.grid(row=r, column=c, padx=8, pady=8, sticky="nsew")
+                bind_mouse_wheel_recursive(card, self.gallery_scroll)
 
     def _on_gallery_resize(self, event):
         """Triggers dynamic reflow of grid columns when window scales."""

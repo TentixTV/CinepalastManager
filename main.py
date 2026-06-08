@@ -28,6 +28,15 @@ if os.path.exists(src_assets):
                 except Exception as e:
                     print(f"Failed to copy asset {file}: {e}")
 
+# Copy cinepalast.db from install directory to AppData if not exists in AppData
+src_db = os.path.join(app_dir, "cinepalast.db")
+dest_db = os.path.join(DATA_DIR, "cinepalast.db")
+if os.path.exists(src_db) and not os.path.exists(dest_db):
+    try:
+        shutil.copy2(src_db, dest_db)
+    except Exception as e:
+        print(f"Failed to copy database {src_db}: {e}")
+
 # Change current working directory to AppData, so all relative operations target AppData
 os.chdir(DATA_DIR)
 
