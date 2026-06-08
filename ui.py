@@ -1386,6 +1386,7 @@ class CinePalastApp(ctk.CTk):
         self.last_width = 0
         self.movies_list = [] # Cached list of current movies displayed
         self.online_movies_list = [] # Online recommendations from TMDB
+        self.view_mode = "Galerie" # Default view mode
         
         # 2. Setup Top Panel Layout
         self._setup_top_panel()
@@ -1448,6 +1449,16 @@ class CinePalastApp(ctk.CTk):
         self.btn_frame = ctk.CTkFrame(self.top_panel, fg_color="transparent")
         self.btn_frame.pack(side="right", padx=20, pady=15)
         
+        # View Switcher (Segmented Button for Galerie/Tabelle)
+        self.view_switch = ctk.CTkSegmentedButton(self.btn_frame, values=["Galerie", "Tabelle"],
+                                                  command=self._on_view_changed,
+                                                  selected_color=ACCENT_COLOR,
+                                                  selected_hover_color=ACCENT_HOVER,
+                                                  unselected_color="#1E1E26",
+                                                  text_color=TEXT_PRIMARY)
+        self.view_switch.pack(side="left", padx=(0, 10))
+        self.view_switch.set("Galerie")
+        
         self.btn_add = ctk.CTkButton(self.btn_frame, text="+ Film hinzufügen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
                                      fg_color=ACCENT_COLOR, text_color="#000000", hover_color=ACCENT_HOVER, command=self._show_add_overlay)
         self.btn_add.pack(side="left", padx=(0, 10))
@@ -1472,10 +1483,13 @@ class CinePalastApp(ctk.CTk):
 
     # --- GALLERY RENDERING & REFLOW ---
     def refresh_gallery(self):
-        """Loads films from DB matching search query, and schedules a grid refresh."""
+        """Loads films from DB matching search query, and schedules a grid or table refresh."""
         query = self.entry_main_search.get().strip()
         self.movies_list = self.db_manager.search_movies(query)
-        self._regrid_movies()
+        if self.view_mode == "Galerie":
+            self._regrid_movies()
+        else:
+            self._refresh_table_data()
 
     def _regrid_movies(self):
         """Clears the grid inside scrollable container and repopulates based on column fit."""
@@ -1685,3 +1699,112 @@ class CinePalastApp(ctk.CTk):
             self.active_overlay.entry_search.delete(0, "end")
             self.active_overlay.entry_search.insert(0, query)
             self.active_overlay._perform_online_search()
+
+    def _on_view_changed(self, view_mode):
+        self.view_mode = view_mode
+        if view_mode == "Galerie":
+            if hasattr(self, "table_container") and self.table_container.winfo_exists():
+                self.table_container.pack_forget()
+            self.gallery_scroll.pack(fill="both", expand=True, padx=20, pady=(10, 20))
+            self.refresh_gallery()
+        else:
+            self.gallery_scroll.pack_forget()
+            self._show_table_view()
+
+    def _show_table_view(self):
+        if hasattr(self, "table_container") and self.table_container.winfo_exists():
+            try:
+                self.table_container.destroy()
+            except Exception:
+                pass
+                
+        self.table_container = ctk.CTkFrame(self, fg_color="transparent")
+        self.table_container.pack(fill="both", expand=True, padx=20, pady=(10, 20))
+        
+        import tkinter.ttk as ttk
+        
+        style = ttk.Style()
+        style.theme_use("default")
+        
+        style.configure("Treeview",
+                        background=PANEL_COLOR,
+                        foreground=TEXT_PRIMARY,
+                        rowheight=30,
+                        fieldbackground=PANEL_COLOR,
+                        bordercolor=CARD_BORDER,
+                        borderwidth=0)
+        style.map('Treeview',
+                  background=[('selected', ACCENT_COLOR)],
+                  foreground=[('selected', '#000000')])
+                  
+        style.configure("Treeview.Heading",
+                        background="#1E1E26",
+                        foreground=TEXT_PRIMARY,
+                        font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                        relief="flat")
+        style.map("Treeview.Heading",
+                  background=[('active', ACCENT_COLOR)],
+                  foreground=[('active', '#000000')])
+                  
+        scrollbar = ctk.CTkScrollbar(self.table_container, orientation="vertical")
+        scrollbar.pack(side="right", fill="y")
+        
+        columns = ("id", "titel", "jahr", "genre", "laufzeit", "fsk", "regisseur", "filmreihe", "land")
+        self.tree = ttk.Treeview(self.table_container, columns=columns, show="headings", yscrollcommand=scrollbar.set, selectmode="browse")
+        
+        scrollbar.configure(command=self.tree.yview)
+        
+        self.tree.heading("id", text="ID")
+        self.tree.heading("titel", text="Titel / Name")
+        self.tree.heading("jahr", text="Jahr")
+        self.tree.heading("genre", text="Genre")
+        self.tree.heading("laufzeit", text="Laufzeit (Min.)")
+        self.tree.heading("fsk", text="FSK")
+        self.tree.heading("regisseur", text="Regisseur")
+        self.tree.heading("filmreihe", text="Filmreihe")
+        self.tree.heading("land", text="Land")
+        
+        self.tree.column("id", width=40, minwidth=40, anchor="center")
+        self.tree.column("titel", width=220, minwidth=150, anchor="w")
+        self.tree.column("jahr", width=60, minwidth=60, anchor="center")
+        self.tree.column("genre", width=140, minwidth=100, anchor="w")
+        self.tree.column("laufzeit", width=95, minwidth=80, anchor="center")
+        self.tree.column("fsk", width=60, minwidth=60, anchor="center")
+        self.tree.column("regisseur", width=120, minwidth=100, anchor="w")
+        self.tree.column("filmreihe", width=110, minwidth=80, anchor="w")
+        self.tree.column("land", width=90, minwidth=70, anchor="center")
+        
+        self.tree.pack(fill="both", expand=True)
+        
+        self.tree.bind("<Double-1>", self._on_table_double_click)
+        self._refresh_table_data()
+
+    def _on_table_double_click(self, event):
+        selection = self.tree.selection()
+        if not selection:
+            return
+        item_id = selection[0]
+        values = self.tree.item(item_id, "values")
+        if values:
+            movie_id = int(values[0])
+            self._show_movie_details(movie_id)
+
+    def _refresh_table_data(self):
+        if not hasattr(self, "tree") or not self.tree.winfo_exists():
+            return
+            
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        for m in self.movies_list:
+            self.tree.insert("", "end", values=(
+                m.get("id", ""),
+                m.get("titel", "Unbekannt"),
+                m.get("jahr") or "k.A.",
+                m.get("genre_richtung", "k.A."),
+                f"{m.get('laufzeit_min', 0)} Min." if m.get('laufzeit_min') else "k.A.",
+                m.get("fsk", "k.A."),
+                m.get("regisseur", "k.A."),
+                m.get("filmreihe", "-") or "-",
+                m.get("produktionsland", "k.A.")
+            ))
