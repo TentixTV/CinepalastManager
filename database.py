@@ -60,6 +60,14 @@ class DatabaseManager:
         :param movie_data: A dictionary containing movie metadata matching the columns.
         :return: The ID of the inserted record.
         """
+        # Ensure title has (Year) suffix if year is specified and suffix is not already in the title
+        titel = movie_data.get("titel", "Unbekannt")
+        jahr = movie_data.get("jahr")
+        if jahr:
+            year_suffix = f"({jahr})"
+            if year_suffix not in titel:
+                movie_data["titel"] = f"{titel} {year_suffix}"
+
         query = """
         INSERT INTO filme (
             titel, jahr, schauspieler_cast, genre_richtung, laufzeit_min,
@@ -84,6 +92,14 @@ class DatabaseManager:
         :param movie_id: The ID of the movie to update.
         :param movie_data: A dictionary containing fields to be updated.
         """
+        # Ensure title has (Year) suffix
+        titel = movie_data.get("titel")
+        jahr = movie_data.get("jahr")
+        if titel and jahr:
+            year_suffix = f"({jahr})"
+            if year_suffix not in titel:
+                movie_data["titel"] = f"{titel} {year_suffix}"
+
         # Exclude 'id' if present in dictionary keys to avoid SQL constraints
         data = {k: v for k, v in movie_data.items() if k != "id"}
         set_clause = ", ".join([f"{key} = :{key}" for key in data.keys()])

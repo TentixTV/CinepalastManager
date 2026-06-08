@@ -7,7 +7,7 @@ AppId={{5E583391-766F-48A0-A7EA-918991D4C63E}
 AppName=CinePalast Manager
 AppVersion=1.0
 AppPublisher=Mannis Kinopalast
-DefaultDirName={pf}\CinePalast Manager
+DefaultDirName={localappdata}\CinePalast Manager
 DefaultGroupName=CinePalast Manager
 OutputDir=.
 OutputBaseFilename=CinePalastSetup
@@ -17,6 +17,7 @@ SolidCompression=yes
 SetupIconFile=icon.ico
 UninstallDisplayIcon={app}\CinePalast.exe
 WizardStyle=modern
+PrivilegesRequired=lowest
 
 [Languages]
 Name: "german"; MessagesFile: "compiler:Languages\German.isl"
@@ -29,6 +30,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "dist\CinePalast.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Standard-App-Icon kopieren
 Source: "assets\DTB.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+; FSK Icons kopieren (falls beim Build vorhanden)
+Source: "assets\fsk\*"; DestDir: "{app}\assets\fsk"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 ; Hinweis: Gecachte Ordner (assets/) und die Datenbank (cinepalast.db) werden 
 ; automatisch im selben Ordner erstellt, in dem die .exe gestartet wird.
 

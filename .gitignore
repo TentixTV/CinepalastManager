@@ -31,3 +31,4 @@ assets/banners/*
 build/
 dist/
 *.spec
+*.exe

@@ -7,22 +7,40 @@ from typing import List, Dict, Optional
 
 CONFIG_FILE = "config.json"
 
-def load_api_key() -> str:
-    """Loads the TMDB API key from config.json. Returns empty string if not set."""
+def load_config() -> dict:
+    """Loads the config dictionary from config.json. Returns empty dict if not set."""
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data.get("api_key", "").strip()
+                return json.load(f)
         except Exception:
             pass
-    return ""
+    return {}
+
+def save_config(config_data: dict):
+    """Saves the config dictionary to config.json."""
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(config_data, f, indent=4, ensure_ascii=False)
+
+def load_api_key() -> str:
+    """Loads the TMDB API key from config.json."""
+    return load_config().get("api_key", "").strip()
 
 def save_api_key(api_key: str):
-    """Saves the TMDB API key to config.json."""
-    data = {"api_key": api_key.strip()}
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
+    """Saves the TMDB API key to config.json, preserving other settings."""
+    cfg = load_config()
+    cfg["api_key"] = api_key.strip()
+    save_config(cfg)
+
+def load_github_token() -> str:
+    """Loads the GitHub token from config.json."""
+    return load_config().get("github_token", "").strip()
+
+def save_github_token(github_token: str):
+    """Saves the GitHub token to config.json, preserving other settings."""
+    cfg = load_config()
+    cfg["github_token"] = github_token.strip()
+    save_config(cfg)
 
 class TMDBClient:
     """
@@ -37,6 +55,16 @@ class TMDBClient:
     def get_api_key(self) -> str:
         return load_api_key()
 
+    def _get_auth(self, key: str) -> tuple:
+        """
+        Determines if the key is a v3 API Key or a v4 Bearer Token.
+        Returns: (headers, params)
+        """
+        key = key.strip()
+        if len(key) > 50 or key.startswith("eyJ"):
+            return {"Authorization": f"Bearer {key}"}, {}
+        return {}, {"api_key": key}
+
     def has_valid_key(self) -> bool:
         key = self.get_api_key()
         if not key:
@@ -44,7 +72,8 @@ class TMDBClient:
         # Test the key briefly with a lightweight request
         try:
             url = f"{self.BASE_URL}/configuration"
-            response = requests.get(url, params={"api_key": key}, timeout=5)
+            headers, params = self._get_auth(key)
+            response = requests.get(url, headers=headers, params=params, timeout=5)
             return response.status_code == 200
         except Exception:
             return False
@@ -59,14 +88,14 @@ class TMDBClient:
             raise ValueError("Kein TMDB API-Schlüssel konfiguriert.")
 
         url = f"{self.BASE_URL}/search/movie"
-        params = {
-            "api_key": api_key,
+        headers, params = self._get_auth(api_key)
+        params.update({
             "query": query,
             "language": "de-DE",
             "page": 1
-        }
+        })
         
-        response = requests.get(url, params=params, timeout=10)
+        response = requests.get(url, headers=headers, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
         
@@ -172,13 +201,13 @@ class TMDBClient:
             raise ValueError("Kein TMDB API-Schlüssel konfiguriert.")
 
         url = f"{self.BASE_URL}/movie/{tmdb_id}"
-        params = {
-            "api_key": api_key,
+        headers, params = self._get_auth(api_key)
+        params.update({
             "language": "de-DE",
             "append_to_response": "credits,release_dates"
-        }
+        })
         
-        response = requests.get(url, params=params, timeout=10)
+        response = requests.get(url, headers=headers, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
 
@@ -242,13 +271,13 @@ class TMDBClient:
             raise ValueError("Kein TMDB API-Schlüssel konfiguriert.")
 
         url = f"{self.BASE_URL}/movie/{tmdb_id}"
-        params = {
-            "api_key": api_key,
+        headers, params = self._get_auth(api_key)
+        params.update({
             "language": "de-DE",
             "append_to_response": "credits,release_dates"
-        }
+        })
         
-        response = requests.get(url, params=params, timeout=10)
+        response = requests.get(url, headers=headers, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
 
@@ -355,4 +384,56 @@ class TMDBClient:
             print(f"Error downloading image {download_url}: {e}")
             
         return ""
+
+
+def check_for_update(current_version: str) -> Optional[str]:
+    """
+    Checks if a newer version of CinePalast is available on GitHub.
+    Returns the remote version string if an update is available, otherwise None.
+    """
+    token = load_github_token()
+    if not token:
+        return None
+        
+    url = "https://api.github.com/repos/TentixTV/CinepalastManager/contents/version.json?ref=master"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3.raw"
+    }
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            remote_version = data.get("version", "").strip()
+            if remote_version and remote_version != current_version:
+                return remote_version
+    except Exception as e:
+        print(f"Error checking for updates on GitHub: {e}")
+    return None
+
+
+def download_update_installer(token: str, dest_path: str, progress_callback=None):
+    """
+    Downloads CinePalastSetup.exe from the private repository on GitHub.
+    Uses the application/vnd.github.v3.raw Accept header to stream raw bytes.
+    """
+    url = "https://api.github.com/repos/TentixTV/CinepalastManager/contents/CinePalastSetup.exe?ref=master"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3.raw"
+    }
+    response = requests.get(url, headers=headers, stream=True, timeout=60)
+    response.raise_for_status()
+    
+    total_size = int(response.headers.get('content-length', 0))
+    downloaded = 0
+    
+    with open(dest_path, "wb") as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            if chunk:
+                f.write(chunk)
+                downloaded += len(chunk)
+                if progress_callback and total_size > 0:
+                    progress_callback(downloaded, total_size)
+
 

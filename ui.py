@@ -7,10 +7,19 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import customtkinter as ctk
 from PIL import Image, ImageDraw, ImageFont
+from typing import Optional
 
 # Set appearance and theme
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue") # cyan accents will be set manually
+
+# Load theme configuration from config.json
+from api import load_config
+_theme = "cyan"
+try:
+    _theme = load_config().get("theme", "cyan").strip().lower()
+except Exception:
+    pass
 
 # Theme Colors
 BG_COLOR = "#0B0B0F"            # Deep movie theater black
@@ -20,6 +29,81 @@ ACCENT_HOVER = "#00B3C2"        # Darker cyan
 TEXT_PRIMARY = "#FFFFFF"        # Pure white
 TEXT_SECONDARY = "#A0A0AA"      # Muted gray
 CARD_BORDER = "#1E1E26"         # Subtle card border
+
+if _theme == "red":
+    ACCENT_COLOR = "#EF4444"
+    ACCENT_HOVER = "#DC2626"
+elif _theme == "blue":
+    ACCENT_COLOR = "#3B82F6"
+    ACCENT_HOVER = "#2563EB"
+elif _theme == "purple":
+    ACCENT_COLOR = "#A855F7"
+    ACCENT_HOVER = "#9333EA"
+elif _theme == "black":
+    BG_COLOR = "#050505"
+    PANEL_COLOR = "#0D0D10"
+    ACCENT_COLOR = "#E0E0E0"
+    ACCENT_HOVER = "#A0A0A0"
+    CARD_BORDER = "#1A1A22"
+
+class CTkToolTip:
+    """
+    A beautiful modern hover tooltip for CustomTkinter widgets.
+    """
+    def __init__(self, widget, text, delay=350):
+        self.widget = widget
+        self.text = text
+        self.delay = delay
+        self.tooltip_window = None
+        self.id = None
+        
+        self.widget.bind("<Enter>", self.enter)
+        self.widget.bind("<Leave>", self.leave)
+        self.widget.bind("<ButtonPress>", self.leave)
+        
+    def enter(self, event=None):
+        self.schedule()
+        
+    def leave(self, event=None):
+        self.unschedule()
+        self.hide()
+        
+    def schedule(self):
+        self.unschedule()
+        self.id = self.widget.after(self.delay, self.show)
+        
+    def unschedule(self):
+        if self.id:
+            self.widget.after_cancel(self.id)
+            self.id = None
+            
+    def show(self):
+        if not self.text:
+            return
+        
+        try:
+            x = self.widget.winfo_rootx() + (self.widget.winfo_width() // 2) - 80
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 5
+            
+            self.tooltip_window = tk.Toplevel(self.widget)
+            self.tooltip_window.wm_overrideredirect(True)
+            self.tooltip_window.wm_geometry(f"+{x}+{y}")
+            
+            frame = ctk.CTkFrame(self.tooltip_window, fg_color="#1E1E26", border_width=1, border_color=ACCENT_COLOR, corner_radius=6)
+            frame.pack()
+            
+            lbl = ctk.CTkLabel(frame, text=self.text, font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_PRIMARY, justify="left", padx=8, pady=4)
+            lbl.pack()
+        except Exception:
+            pass
+        
+    def hide(self):
+        if self.tooltip_window:
+            try:
+                self.tooltip_window.destroy()
+            except Exception:
+                pass
+            self.tooltip_window = None
 
 def get_fsk_colors(fsk_value: str):
     """
@@ -39,6 +123,23 @@ def get_fsk_colors(fsk_value: str):
         return ("#b91c1c", "#FFFFFF", "FSK 18") # Red bg, white text
     else:
         return ("#4b5563", "#FFFFFF", f"FSK {fsk_value}" if fsk_value else "FSK k.A.")
+
+def get_fsk_image(fsk_value: str, size: tuple = (35, 35)) -> Optional[ctk.CTkImage]:
+    """
+    Returns the CTkImage for the official FSK badge, or None if not available locally.
+    """
+    if not fsk_value:
+        return None
+    val = fsk_value.strip().lower().replace("fsk", "").replace("ab", "").strip()
+    if val in ["0", "6", "12", "16", "18"]:
+        path = f"assets/fsk/fsk{val}.png"
+        if os.path.exists(path):
+            try:
+                pil_img = Image.open(path)
+                return ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=size)
+            except Exception as e:
+                print(f"Error loading FSK image from {path}: {e}")
+    return None
 
 def create_placeholder_image(size: tuple, title: str, img_type: str) -> Image.Image:
     """
@@ -163,9 +264,14 @@ class MovieCard(ctk.CTkFrame):
         self.year_label = ctk.CTkLabel(self.footer, text=year_str, font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_SECONDARY)
         self.year_label.pack(side="left", anchor="w")
         
-        fsk_bg, fsk_fg, fsk_lbl = get_fsk_colors(self.movie.get("fsk", "k.A."))
-        self.fsk_badge = ctk.CTkLabel(self.footer, text=fsk_lbl, font=ctk.CTkFont(family="Segoe UI", size=9, weight="bold"),
-                                      fg_color=fsk_bg, text_color=fsk_fg, corner_radius=4, width=42, height=18)
+        fsk_val = self.movie.get("fsk", "k.A.")
+        fsk_img = get_fsk_image(fsk_val, size=(22, 22))
+        if fsk_img:
+            self.fsk_badge = ctk.CTkLabel(self.footer, image=fsk_img, text="")
+        else:
+            fsk_bg, fsk_fg, fsk_lbl = get_fsk_colors(fsk_val)
+            self.fsk_badge = ctk.CTkLabel(self.footer, text=fsk_lbl, font=ctk.CTkFont(family="Segoe UI", size=9, weight="bold"),
+                                          fg_color=fsk_bg, text_color=fsk_fg, corner_radius=4, width=42, height=18)
         self.fsk_badge.pack(side="right", anchor="e")
         
         # Bind clicks to all child widgets
@@ -288,9 +394,14 @@ class DetailOverlay(ctk.CTkFrame):
         self.meta_row = ctk.CTkFrame(self.right_col, fg_color="transparent")
         self.meta_row.pack(fill="x", anchor="w", pady=(5, 15))
         
-        fsk_bg, fsk_fg, fsk_lbl = get_fsk_colors(self.movie.get("fsk", "k.A."))
-        self.fsk_badge = ctk.CTkLabel(self.meta_row, text=fsk_lbl, font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-                                      fg_color=fsk_bg, text_color=fsk_fg, corner_radius=4, width=55, height=22)
+        fsk_val = self.movie.get("fsk", "k.A.")
+        fsk_img = get_fsk_image(fsk_val, size=(30, 30))
+        if fsk_img:
+            self.fsk_badge = ctk.CTkLabel(self.meta_row, image=fsk_img, text="")
+        else:
+            fsk_bg, fsk_fg, fsk_lbl = get_fsk_colors(fsk_val)
+            self.fsk_badge = ctk.CTkLabel(self.meta_row, text=fsk_lbl, font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                                          fg_color=fsk_bg, text_color=fsk_fg, corner_radius=4, width=55, height=22)
         self.fsk_badge.pack(side="left")
         
         genre_str = self.movie.get("genre_richtung", "k.A.")
@@ -326,7 +437,7 @@ class DetailOverlay(ctk.CTkFrame):
         if not sync_text:
             sync_text = "Keine Angaben vorhanden. Klicken Sie unten auf 'Bearbeiten', um Synchronsprecher einzutragen."
             
-        self.txt_sync = ctk.CTkLabel(self.right_col, text=sync_text, font=ctk.CTkFont(family="Segoe UI", size=12, italic=not self.movie.get("deutsche_synchronsprecher")),
+        self.txt_sync = ctk.CTkLabel(self.right_col, text=sync_text, font=ctk.CTkFont(family="Segoe UI", size=12, slant="italic" if not self.movie.get("deutsche_synchronsprecher") else "roman"),
                                      text_color=TEXT_PRIMARY, justify="left", wraplength=550)
         self.txt_sync.pack(anchor="w", pady=(0, 20))
         
@@ -369,7 +480,7 @@ class SettingsOverlay(ctk.CTkFrame):
         self.on_close_callback = on_close_callback
         
         self.container = ctk.CTkFrame(self, fg_color=PANEL_COLOR, border_width=1, border_color=CARD_BORDER, corner_radius=16)
-        self.container.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.6, relheight=0.5)
+        self.container.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.6, relheight=0.6)
         
         self.lbl_title = ctk.CTkLabel(self.container, text="TMDB API EINSTELLUNGEN", font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"), text_color=ACCENT_COLOR)
         self.lbl_title.pack(pady=20)
@@ -393,6 +504,24 @@ class SettingsOverlay(ctk.CTkFrame):
         self.entry_key.pack(side="left", fill="x", expand=True)
         # Prepopulate key
         self.entry_key.insert(0, self.tmdb_client.get_api_key())
+        
+        # Theme Choice Row
+        self.theme_frame = ctk.CTkFrame(self.container, fg_color="transparent")
+        self.theme_frame.pack(fill="x", padx=40, pady=10)
+        
+        self.lbl_theme = ctk.CTkLabel(self.theme_frame, text="Design-Farbe:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY)
+        self.lbl_theme.pack(side="left", padx=(0, 10))
+        
+        self.theme_option = ctk.CTkOptionMenu(self.theme_frame, values=["Cyan", "Rot", "Blau", "Lila", "Schwarz"],
+                                              fg_color="#1E1E26", button_color=ACCENT_COLOR, button_hover_color=ACCENT_HOVER,
+                                              dropdown_fg_color="#1E1E26", dropdown_text_color=TEXT_PRIMARY,
+                                              dropdown_hover_color="rgba(255, 255, 255, 0.05)", text_color=TEXT_PRIMARY)
+        self.theme_option.pack(side="left", fill="x", expand=True)
+        
+        # Prepopulate theme dropdown
+        theme_map = {"cyan": "Cyan", "red": "Rot", "blue": "Blau", "purple": "Lila", "black": "Schwarz"}
+        current_theme_display = theme_map.get(_theme, "Cyan")
+        self.theme_option.set(current_theme_display)
         
         # Status Label
         self.lbl_status = ctk.CTkLabel(self.container, text="Status: Prüfe API-Schlüssel...", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color=TEXT_SECONDARY)
@@ -435,9 +564,15 @@ class SettingsOverlay(ctk.CTkFrame):
         # Briefly query config validation
         try:
             url = "https://api.themoviedb.org/3/configuration"
-            response = requests = self.tmdb_client.BASE_URL # placeholder access but let's query raw requests directly
-            import requests as req
-            resp = req.get(url, params={"api_key": test_key}, timeout=5)
+            import requests
+            if len(test_key) > 50 or test_key.startswith("eyJ"):
+                headers = {"Authorization": f"Bearer {test_key}"}
+                params = {}
+            else:
+                headers = {}
+                params = {"api_key": test_key}
+            
+            resp = requests.get(url, headers=headers, params=params, timeout=5)
             if resp.status_code == 200:
                 self.lbl_status.configure(text="Status: Verbindung erfolgreich! Gültiger Schlüssel.", text_color="#22c55e")
             else:
@@ -447,9 +582,18 @@ class SettingsOverlay(ctk.CTkFrame):
             
     def _save_key(self):
         new_key = self.entry_key.get().strip()
-        from api import save_api_key
+        from api import save_api_key, load_config, save_config
         save_api_key(new_key)
-        messagebox.showinfo("Gespeichert", "TMDB API-Schlüssel wurde erfolgreich lokal gespeichert.")
+        
+        # Save theme configuration
+        theme_display_map = {"Cyan": "cyan", "Rot": "red", "Blau": "blue", "Lila": "purple", "Schwarz": "black"}
+        selected_theme = theme_display_map.get(self.theme_option.get(), "cyan")
+        
+        cfg = load_config()
+        cfg["theme"] = selected_theme
+        save_config(cfg)
+        
+        messagebox.showinfo("Gespeichert", "Einstellungen wurden erfolgreich gespeichert.\n\nBitte starten Sie die App neu, um das neue Design anzuwenden.")
         self.on_close_callback()
 
 
@@ -510,6 +654,7 @@ class AddMovieOverlay(ctk.CTkFrame):
         self.entry_search = ctk.CTkEntry(self.search_bar_frame, placeholder_text="Filmtitel in Deutsch suchen...", fg_color="#1E1E26", border_color=CARD_BORDER)
         self.entry_search.pack(side="left", fill="x", expand=True, padx=(0, 10))
         self.entry_search.bind("<Return>", lambda e: self._perform_online_search())
+        self.entry_search.bind("<KeyRelease>", self._on_search_key_release)
         
         self.btn_search = ctk.CTkButton(self.search_bar_frame, text="Suchen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
                                         fg_color=ACCENT_COLOR, text_color="#000000", hover_color=ACCENT_HOVER, width=80, command=self._perform_online_search)
@@ -519,7 +664,7 @@ class AddMovieOverlay(ctk.CTkFrame):
         self.results_scroll = ctk.CTkScrollableFrame(self.left_pane, fg_color="transparent", border_width=1, border_color=CARD_BORDER, corner_radius=8)
         self.results_scroll.pack(fill="both", expand=True)
         
-        self.results_empty = ctk.CTkLabel(self.results_scroll, text="Bitte geben Sie einen Filmtitel ein\nund klicken Sie auf Suchen.", font=ctk.CTkFont(family="Segoe UI", size=12, italic=True), text_color=TEXT_SECONDARY)
+        self.results_empty = ctk.CTkLabel(self.results_scroll, text="Bitte geben Sie einen Filmtitel ein\nund klicken Sie auf Suchen.", font=ctk.CTkFont(family="Segoe UI", size=12, slant="italic"), text_color=TEXT_SECONDARY)
         self.results_empty.pack(expand=True, pady=100)
         
         # Right side: preview panel
@@ -531,8 +676,13 @@ class AddMovieOverlay(ctk.CTkFrame):
     def show_preview_placeholder(self, text: str):
         for widget in self.preview_panel.winfo_children():
             widget.destroy()
-        lbl = ctk.CTkLabel(self.preview_panel, text=text, font=ctk.CTkFont(family="Segoe UI", size=13, italic=True), text_color=TEXT_SECONDARY, justify="center")
+        lbl = ctk.CTkLabel(self.preview_panel, text=text, font=ctk.CTkFont(family="Segoe UI", size=13, slant="italic"), text_color=TEXT_SECONDARY, justify="center")
         lbl.pack(expand=True, pady=50)
+
+    def _on_search_key_release(self, event):
+        if hasattr(self, "_search_timer") and self._search_timer:
+            self.after_cancel(self._search_timer)
+        self._search_timer = self.after(500, self._perform_online_search)
 
     def _perform_online_search(self):
         query = self.entry_search.get().strip()
@@ -559,7 +709,7 @@ class AddMovieOverlay(ctk.CTkFrame):
             self.btn_search.configure(state="normal", text="Suchen")
             
             if not results:
-                no_res = ctk.CTkLabel(self.results_scroll, text="Keine Filme mit diesem Titel gefunden.", font=ctk.CTkFont(family="Segoe UI", size=12, italic=True), text_color=TEXT_SECONDARY)
+                no_res = ctk.CTkLabel(self.results_scroll, text="Keine Filme mit diesem Titel gefunden.", font=ctk.CTkFont(family="Segoe UI", size=12, slant="italic"), text_color=TEXT_SECONDARY)
                 no_res.pack(pady=40)
                 return
                 
@@ -671,9 +821,14 @@ class AddMovieOverlay(ctk.CTkFrame):
         meta_frame = ctk.CTkFrame(preview_scroll, fg_color="transparent")
         meta_frame.pack(fill="x", pady=(0, 10))
         
-        fsk_bg, fsk_fg, fsk_lbl = get_fsk_colors(preview_data.get("fsk", "k.A."))
-        fsk_badge = ctk.CTkLabel(meta_frame, text=fsk_lbl, font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
-                                 fg_color=fsk_bg, text_color=fsk_fg, corner_radius=4, width=50, height=20)
+        fsk_val = preview_data.get("fsk", "k.A.")
+        fsk_img = get_fsk_image(fsk_val, size=(26, 26))
+        if fsk_img:
+            fsk_badge = ctk.CTkLabel(meta_frame, image=fsk_img, text="")
+        else:
+            fsk_bg, fsk_fg, fsk_lbl = get_fsk_colors(fsk_val)
+            fsk_badge = ctk.CTkLabel(meta_frame, text=fsk_lbl, font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+                                     fg_color=fsk_bg, text_color=fsk_fg, corner_radius=4, width=50, height=20)
         fsk_badge.pack(side="left")
         
         runtime = preview_data.get("laufzeit_min", 0)
@@ -1219,6 +1374,11 @@ class CinePalastApp(ctk.CTk):
                                           fg_color="transparent", text_color=TEXT_PRIMARY, border_color=CARD_BORDER, border_width=1,
                                           hover_color="rgba(255, 255, 255, 0.05)", command=self._show_settings_overlay)
         self.btn_settings.pack(side="left")
+        
+        # Bind Tooltips
+        CTkToolTip(self.entry_main_search, "Durchsuche deine lokale Film-Bibliothek nach Titel, Genre, Cast oder Regisseur.")
+        CTkToolTip(self.btn_add, "Füge neue Filme online via TMDB oder manuell hinzu.")
+        CTkToolTip(self.btn_settings, "Öffne die Einstellungen für den TMDB API-Key und das Design.")
 
     # --- GALLERY RENDERING & REFLOW ---
     def refresh_gallery(self):
@@ -1235,15 +1395,28 @@ class CinePalastApp(ctk.CTk):
             
         # 2. Check if database is empty
         if not self.movies_list:
+            search_query = self.entry_main_search.get().strip()
             # Show empty placeholder message
             empty_msg = ("Es befinden sich keine Filme in der Auswahl.\n"
                          "Klicken Sie oben auf '+ Film hinzufügen', "
                          "um Ihre Sammlung aufzubauen.")
-            if self.entry_main_search.get().strip():
-                empty_msg = f"Keine Ergebnisse für die Suche nach '{self.entry_main_search.get().strip()}' gefunden."
+            if search_query:
+                empty_msg = f"Keine lokalen Ergebnisse für die Suche nach '{search_query}' gefunden."
                 
-            self.lbl_empty = ctk.CTkLabel(self.gallery_scroll, text=empty_msg, font=ctk.CTkFont(family="Segoe UI", size=13, italic=True), text_color=TEXT_SECONDARY)
-            self.lbl_empty.pack(expand=True, pady=100)
+            self.lbl_empty = ctk.CTkLabel(self.gallery_scroll, text=empty_msg, font=ctk.CTkFont(family="Segoe UI", size=13, slant="italic"), text_color=TEXT_SECONDARY)
+            self.lbl_empty.pack(expand=True, pady=(80, 10))
+            
+            if search_query:
+                self.btn_online_search_fallback = ctk.CTkButton(
+                    self.gallery_scroll,
+                    text=f'Online nach "{search_query}" suchen',
+                    font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+                    fg_color=ACCENT_COLOR,
+                    text_color="#000000",
+                    hover_color=ACCENT_HOVER,
+                    command=lambda: self._trigger_online_search_from_main(search_query)
+                )
+                self.btn_online_search_fallback.pack(pady=10)
             return
 
         # 3. Calculate grids
@@ -1332,3 +1505,10 @@ class CinePalastApp(ctk.CTk):
         self.db_manager.delete_movie(movie_id)
         self._close_active_overlay()
         self.refresh_gallery()
+
+    def _trigger_online_search_from_main(self, query):
+        self._show_add_overlay()
+        if hasattr(self.active_overlay, "entry_search"):
+            self.active_overlay.entry_search.delete(0, "end")
+            self.active_overlay.entry_search.insert(0, query)
+            self.active_overlay._perform_online_search()
