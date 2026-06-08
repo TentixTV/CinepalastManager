@@ -292,6 +292,96 @@ class MovieCard(ctk.CTkFrame):
         self.configure(border_color=CARD_BORDER)
 
 
+class OnlineMovieCard(ctk.CTkFrame):
+    """
+    A card widget for online TMDB suggestions.
+    Displays poster (downloaded from URL), title, year, and a "+ Hinzufügen" overlay/button.
+    """
+    def __init__(self, parent, movie: dict, on_click_callback):
+        super().__init__(parent, fg_color="#181822", border_width=2, border_color="#3A3A4A", corner_radius=10)
+        self.movie = movie
+        self.on_click_callback = on_click_callback
+        
+        self.configure(width=160, height=290)
+        self.grid_propagate(False)
+        
+        # 1. Poster Image (Fetch online in thread or use placeholder, wrap in CTkImage)
+        self.image_label = ctk.CTkLabel(self, text="Lade Poster...", font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_SECONDARY)
+        self.image_label.pack(pady=(5, 0), padx=5, fill="both", expand=True)
+        
+        # 2. Movie Title
+        title_str = self.movie.get("titel", "Unbekannt")
+        if len(title_str) > 22:
+            title_str = title_str[:19] + "..."
+            
+        self.title_label = ctk.CTkLabel(self, text=title_str, font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color=TEXT_PRIMARY)
+        self.title_label.pack(pady=(3, 0), padx=5, anchor="w")
+        
+        # 3. Footer Row (Year & "+ Hinzufügen" button)
+        self.footer = ctk.CTkFrame(self, fg_color="transparent")
+        self.footer.pack(fill="x", side="bottom", pady=(0, 6), padx=8)
+        
+        year_str = str(self.movie.get("jahr", "k.A."))
+        self.year_label = ctk.CTkLabel(self.footer, text=year_str, font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_SECONDARY)
+        self.year_label.pack(side="left", anchor="w")
+        
+        self.btn_add = ctk.CTkLabel(self.footer, text="+ Import", font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+                                    fg_color="#A855F7", text_color="#FFFFFF", corner_radius=4, width=50, height=18)
+        self.btn_add.pack(side="right", anchor="e")
+        
+        # Bind clicks
+        for widget in [self, self.image_label, self.title_label, self.footer, self.year_label, self.btn_add]:
+            widget.bind("<Button-1>", self._on_card_click)
+            
+        self.bind("<Enter>", self._on_hover_enter)
+        self.bind("<Leave>", self._on_hover_leave)
+        
+        # Start background poster download
+        self._load_poster_async()
+        
+    def _load_poster_async(self):
+        def load_thread():
+            poster_path = self.movie.get("poster_path")
+            if poster_path:
+                try:
+                    url = f"https://image.tmdb.org/t/p/w154{poster_path}"
+                    import requests
+                    resp = requests.get(url, timeout=5)
+                    if resp.status_code == 200:
+                        pil_img = Image.open(io.BytesIO(resp.content))
+                        self.after(0, lambda: self._apply_poster(pil_img))
+                        return
+                except Exception:
+                    pass
+            
+            # Fallback placeholder
+            self.after(0, self._apply_placeholder)
+            
+        import threading
+        threading.Thread(target=load_thread, daemon=True).start()
+        
+    def _apply_poster(self, pil_img):
+        try:
+            ctk_img = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(150, 215))
+            self.image_label.configure(image=ctk_img, text="")
+        except Exception:
+            self._apply_placeholder()
+            
+    def _apply_placeholder(self):
+        fallback_pil = create_placeholder_image((150, 215), self.movie.get("titel", ""), "poster")
+        ctk_img = ctk.CTkImage(light_image=fallback_pil, dark_image=fallback_pil, size=(150, 215))
+        self.image_label.configure(image=ctk_img, text="")
+        
+    def _on_card_click(self, event):
+        self.on_click_callback(self.movie)
+        
+    def _on_hover_enter(self, event):
+        self.configure(border_color="#A855F7")
+        
+    def _on_hover_leave(self, event):
+        self.configure(border_color="#3A3A4A")
+
+
 class LoadingOverlay(ctk.CTkFrame):
     """
     An overlay that prevents interaction and shows a loading spinner state.
@@ -1295,6 +1385,7 @@ class CinePalastApp(ctk.CTk):
         self.current_cols = 1
         self.last_width = 0
         self.movies_list = [] # Cached list of current movies displayed
+        self.online_movies_list = [] # Online recommendations from TMDB
         
         # 2. Setup Top Panel Layout
         self._setup_top_panel()
@@ -1344,7 +1435,7 @@ class CinePalastApp(ctk.CTk):
         self.top_panel = ctk.CTkFrame(self, fg_color=PANEL_COLOR, height=80, corner_radius=0, border_width=0)
         self.top_panel.pack(fill="x", side="top")
         
-        # Title and Subtitle Block
+        # 1. Title and Subtitle Block (Left)
         self.title_frame = ctk.CTkFrame(self.top_panel, fg_color="transparent")
         self.title_frame.pack(side="left", padx=20, pady=10)
         
@@ -1353,16 +1444,7 @@ class CinePalastApp(ctk.CTk):
         self.lbl_app_sub = ctk.CTkLabel(self.title_frame, text="Mannis Kinopalast", font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_SECONDARY)
         self.lbl_app_sub.pack(anchor="w")
         
-        # Real-time Offline Search
-        self.search_frame = ctk.CTkFrame(self.top_panel, fg_color="transparent")
-        self.search_frame.pack(side="left", fill="x", expand=True, padx=40, pady=15)
-        
-        self.entry_main_search = ctk.CTkEntry(self.search_frame, placeholder_text="Bibliothek sekundenschnell durchsuchen...", fg_color="#1E1E26", border_color=CARD_BORDER)
-        self.entry_main_search.pack(fill="x", expand=True)
-        # Bind typing to real-time search
-        self.entry_main_search.bind("<KeyRelease>", self._on_search_key)
-        
-        # Top Buttons Block
+        # 2. Top Buttons Block (Right - packed first so it claims its space)
         self.btn_frame = ctk.CTkFrame(self.top_panel, fg_color="transparent")
         self.btn_frame.pack(side="right", padx=20, pady=15)
         
@@ -1375,6 +1457,14 @@ class CinePalastApp(ctk.CTk):
                                           hover_color="rgba(255, 255, 255, 0.05)", command=self._show_settings_overlay)
         self.btn_settings.pack(side="left")
         
+        # 3. Real-time Search (Center - packed last with expand=True)
+        self.search_frame = ctk.CTkFrame(self.top_panel, fg_color="transparent")
+        self.search_frame.pack(side="left", fill="x", expand=True, padx=40, pady=15)
+        
+        self.entry_main_search = ctk.CTkEntry(self.search_frame, placeholder_text="Bibliothek sekundenschnell durchsuchen...", fg_color="#1E1E26", border_color=CARD_BORDER)
+        self.entry_main_search.pack(fill="x", expand=True)
+        self.entry_main_search.bind("<KeyRelease>", self._on_search_key)
+        
         # Bind Tooltips
         CTkToolTip(self.entry_main_search, "Durchsuche deine lokale Film-Bibliothek nach Titel, Genre, Cast oder Regisseur.")
         CTkToolTip(self.btn_add, "Füge neue Filme online via TMDB oder manuell hinzu.")
@@ -1386,22 +1476,22 @@ class CinePalastApp(ctk.CTk):
         query = self.entry_main_search.get().strip()
         self.movies_list = self.db_manager.search_movies(query)
         self._regrid_movies()
-        
+
     def _regrid_movies(self):
         """Clears the grid inside scrollable container and repopulates based on column fit."""
         # 1. Clear grid widgets
         for widget in self.gallery_scroll.winfo_children():
             widget.destroy()
             
-        # 2. Check if database is empty
-        if not self.movies_list:
+        # 2. Check if both local and online lists are empty
+        if not self.movies_list and not self.online_movies_list:
             search_query = self.entry_main_search.get().strip()
             # Show empty placeholder message
             empty_msg = ("Es befinden sich keine Filme in der Auswahl.\n"
                          "Klicken Sie oben auf '+ Film hinzufügen', "
                          "um Ihre Sammlung aufzubauen.")
             if search_query:
-                empty_msg = f"Keine lokalen Ergebnisse für die Suche nach '{search_query}' gefunden."
+                empty_msg = f"Keine lokalen oder Online-Ergebnisse für die Suche nach '{search_query}' gefunden."
                 
             self.lbl_empty = ctk.CTkLabel(self.gallery_scroll, text=empty_msg, font=ctk.CTkFont(family="Segoe UI", size=13, slant="italic"), text_color=TEXT_SECONDARY)
             self.lbl_empty.pack(expand=True, pady=(80, 10))
@@ -1433,13 +1523,33 @@ class CinePalastApp(ctk.CTk):
         for c in range(cols):
             self.gallery_scroll.grid_columnconfigure(c, weight=1)
             
-        # 4. Place cards
-        for idx, m in enumerate(self.movies_list):
-            r = idx // cols
-            c = idx % cols
+        current_row = 0
+        
+        # 4. Place Local Movies
+        if self.movies_list:
+            lbl_local_header = ctk.CTkLabel(self.gallery_scroll, text="Meine Bibliothek", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=ACCENT_COLOR)
+            lbl_local_header.grid(row=current_row, column=0, columnspan=cols, padx=8, pady=(10, 5), sticky="w")
+            current_row += 1
             
-            card = MovieCard(self.gallery_scroll, m, self._show_movie_details)
-            card.grid(row=r, column=c, padx=8, pady=8, sticky="nsew")
+            for idx, m in enumerate(self.movies_list):
+                r = current_row + (idx // cols)
+                c = idx % cols
+                card = MovieCard(self.gallery_scroll, m, self._show_movie_details)
+                card.grid(row=r, column=c, padx=8, pady=8, sticky="nsew")
+                
+            current_row += (len(self.movies_list) - 1) // cols + 1
+
+        # 5. Place Online Suggestions (TMDB)
+        if self.online_movies_list:
+            lbl_online_header = ctk.CTkLabel(self.gallery_scroll, text="Online-Vorschläge (Klicken zum Importieren)", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color="#A855F7")
+            lbl_online_header.grid(row=current_row, column=0, columnspan=cols, padx=8, pady=(20, 5), sticky="w")
+            current_row += 1
+            
+            for idx, m in enumerate(self.online_movies_list):
+                r = current_row + (idx // cols)
+                c = idx % cols
+                card = OnlineMovieCard(self.gallery_scroll, m, self._import_online_movie_directly)
+                card.grid(row=r, column=c, padx=8, pady=8, sticky="nsew")
 
     def _on_gallery_resize(self, event):
         """Triggers dynamic reflow of grid columns when window scales."""
@@ -1449,8 +1559,71 @@ class CinePalastApp(ctk.CTk):
             self._regrid_movies()
 
     def _on_search_key(self, event):
-        """Instantly queries SQLite database as the user types (real-time)."""
+        """Instantly queries SQLite database, and schedules online TMDB search."""
         self.refresh_gallery()
+        
+        # Debounce TMDB online search
+        if hasattr(self, "_main_search_timer") and self._main_search_timer:
+            self.after_cancel(self._main_search_timer)
+            
+        query = self.entry_main_search.get().strip()
+        if len(query) >= 2 and self.tmdb_client.get_api_key():
+            self._main_search_timer = self.after(500, lambda: self._perform_main_online_search(query))
+        else:
+            self.online_movies_list = []
+            self._regrid_movies()
+
+    def _perform_main_online_search(self, query):
+        def thread_func():
+            try:
+                results = self.tmdb_client.search_movies(query)
+                # Filter out movies already in local database (by title)
+                local_titles = {m["titel"].lower() for m in self.db_manager.get_all_movies()}
+                filtered_results = []
+                for m in results:
+                    title_with_year = f"{m['titel']} ({m['jahr']})"
+                    if title_with_year.lower() not in local_titles and m['titel'].lower() not in local_titles:
+                        filtered_results.append(m)
+                
+                self.online_movies_list = filtered_results[:6] # Top 6 recommendations
+                self.after(0, self._regrid_movies)
+            except Exception as e:
+                print(f"Error in main online search: {e}")
+                self.online_movies_list = []
+                self.after(0, self._regrid_movies)
+                
+        import threading
+        threading.Thread(target=thread_func, daemon=True).start()
+
+    def _import_online_movie_directly(self, movie):
+        # Clear main window contents and show fullscreen loading state
+        for widget in self.gallery_scroll.winfo_children():
+            widget.destroy()
+            
+        loading = ctk.CTkLabel(self.gallery_scroll, text=f'Füge "{movie["titel"]}" hinzu und lade Plakate herunter... Bitte warten.',
+                               font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=ACCENT_COLOR)
+        loading.pack(expand=True, pady=100)
+        self.update()
+        
+        def import_thread():
+            try:
+                tmdb_id = movie["tmdb_id"]
+                full_details = self.tmdb_client.fetch_movie_details(tmdb_id)
+                self.db_manager.add_movie(full_details)
+                self.after(0, self._import_success)
+            except Exception as e:
+                self.after(0, lambda err=e: messagebox.showerror("Fehler", f"Import fehlgeschlagen: {str(err)}"))
+                self.after(0, self.refresh_gallery)
+                
+        import threading
+        threading.Thread(target=import_thread, daemon=True).start()
+        
+    def _import_success(self):
+        # Clear search input
+        self.entry_main_search.delete(0, "end")
+        self.online_movies_list = []
+        self.refresh_gallery()
+        messagebox.showinfo("Erfolg", "Film wurde erfolgreich zu deiner Bibliothek hinzugefügt!")
 
     # --- OVERLAY HANDLING ---
     def _close_active_overlay(self):
