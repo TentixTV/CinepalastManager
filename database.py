@@ -229,6 +229,19 @@ class DatabaseManager:
             return self._db_to_ui(row)
         return {}
 
+    def get_movies_by_series(self, series_name: str) -> list:
+        """Retrieves all movies matching a specific Filmreihe/series name (case-insensitive)."""
+        if not series_name or not series_name.strip() or series_name == "-":
+            return []
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM media WHERE Filmreihe LIKE ? ORDER BY Jahr ASC, Name ASC;", (series_name.strip(),))
+        rows = cursor.fetchall()
+        results = [self._db_to_ui(dict(row)) for row in rows]
+        conn.close()
+        return results
+
     def update_movie(self, movie_id: int, movie_dict: dict):
         db_data = self._ui_to_db(movie_dict)
         update_movie_by_id(movie_id, db_data, self.db_path)
@@ -238,16 +251,7 @@ class DatabaseManager:
 
     def seed_db_if_empty(self):
         """Seeds the database with popular movies if empty, and fetches their images in the background."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='media';")
-        if not cursor.fetchone():
-            conn.close()
-            return
-            
-        cursor.execute("SELECT COUNT(*) FROM media;")
-        count = cursor.fetchone()[0]
-        conn.close()
+        return  # Do not seed automatically; user wants it completely empty.
         
         if count > 0:
             return

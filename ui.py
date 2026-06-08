@@ -260,6 +260,73 @@ def bind_mouse_wheel_recursive(widget, scroll_frame):
         bind_mouse_wheel_recursive(child, scroll_frame)
 
 
+class SelectableLabel(tk.Text):
+    """
+    A read-only, borderless text widget that mimics a wrapping label but
+    allows text selection (highlighting) and copying (Ctrl+C).
+    Automatically adjusts its height to fit the wrapped lines.
+    Redirects mouse wheel events to the parent canvas for scrolling.
+    """
+    def __init__(self, parent, text, font, fg_color, bg_color, **kwargs):
+        super().__init__(parent, wrap="word", relief="flat", borderwidth=0, highlightthickness=0, 
+                         bg=bg_color, fg=fg_color, font=font, cursor="xterm", width=1, **kwargs)
+        self.insert("1.0", text)
+        self.configure(state="disabled")
+        
+        self.bind("<Configure>", self._adjust_height)
+        self.bind("<MouseWheel>", self._on_mouse_wheel)
+
+    def _adjust_height(self, event=None):
+        self.update_idletasks()
+        try:
+            d_lines = self.count("1.0", "end", "displaylines")
+            if d_lines and d_lines[0] > 0:
+                self.configure(height=d_lines[0])
+            else:
+                num_lines = int(self.index("end-1c").split(".")[0])
+                self.configure(height=num_lines)
+        except Exception:
+            pass
+
+    def _on_mouse_wheel(self, event):
+        p = self.master
+        while p:
+            if hasattr(p, "_canvas"):
+                try:
+                    p._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+                except Exception:
+                    pass
+                return "break"
+            p = p.master
+
+
+class SelectableSingleLine(tk.Entry):
+    """
+    A read-only, borderless entry widget that mimics a single-line label but
+    allows text selection (highlighting) and copying (Ctrl+C).
+    Redirects mouse wheel events to the parent canvas for scrolling.
+    """
+    def __init__(self, parent, text, font, fg_color, bg_color, **kwargs):
+        super().__init__(parent, relief="flat", borderwidth=0, highlightthickness=0, 
+                         bg=bg_color, fg=fg_color, font=font, cursor="xterm", 
+                         readonlybackground=bg_color, **kwargs)
+        self.insert(0, text)
+        self.configure(state="readonly")
+        
+        self.bind("<MouseWheel>", self._on_mouse_wheel)
+
+    def _on_mouse_wheel(self, event):
+        p = self.master
+        while p:
+            if hasattr(p, "_canvas"):
+                try:
+                    p._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+                except Exception:
+                    pass
+                return "break"
+            p = p.master
+
+
 class MovieCard(ctk.CTkFrame):
     """
     A single movie card widget displayed inside the media gallery.
@@ -523,7 +590,22 @@ class DetailOverlay(ctk.CTkFrame):
         
         self.add_quick_info_row("Laufzeit:", f"{self.movie.get('laufzeit_min', 0)} Min.")
         self.add_quick_info_row("Produktionsland:", self.movie.get("produktionsland", "k.A."))
-        self.add_quick_info_row("Filmreihe:", self.movie.get("filmreihe", "-") or "-")
+        
+        # Filmreihe relation lookup
+        series_name = self.movie.get("filmreihe", "").strip()
+        series_val = "-"
+        if series_name and series_name != "-":
+            series_val = series_name
+            try:
+                # self.master is the CinePalastApp instance, which has db_manager
+                other_movies = [m for m in self.master.db_manager.get_movies_by_series(series_name) if m.get("id") != self.movie.get("id")]
+                if other_movies:
+                    other_titles = "\n".join([f"• {m.get('titel')} ({m.get('jahr')})" if m.get('jahr') else f"• {m.get('titel')}" for m in other_movies])
+                    series_val = f"{series_name}\n\nAndere in der Reihe:\n{other_titles}"
+            except Exception as e:
+                print(f"Error fetching other movies in series: {e}")
+        
+        self.add_quick_info_row("Filmreihe:", series_val)
         self.add_quick_info_row("Studio/Firma:", self.movie.get("produktionsfirma_studio", "k.A."))
         
         # --- RIGHT COLUMN ---
@@ -534,12 +616,12 @@ class DetailOverlay(ctk.CTkFrame):
         self.title_row = ctk.CTkFrame(self.right_col, fg_color="transparent")
         self.title_row.pack(fill="x", anchor="w")
         
-        self.lbl_title = ctk.CTkLabel(self.title_row, text=self.movie.get("titel"), font=ctk.CTkFont(family="Segoe UI", size=26, weight="bold"), text_color=ACCENT_COLOR)
+        self.lbl_title = SelectableSingleLine(self.title_row, text=self.movie.get("titel"), font=ctk.CTkFont(family="Segoe UI", size=26, weight="bold"), fg_color=ACCENT_COLOR, bg_color=PANEL_COLOR)
         self.lbl_title.pack(side="left")
         
         year_val = self.movie.get("jahr")
         year_text = f" ({year_val})" if year_val else ""
-        self.lbl_year = ctk.CTkLabel(self.title_row, text=year_text, font=ctk.CTkFont(family="Segoe UI", size=22), text_color=TEXT_SECONDARY)
+        self.lbl_year = SelectableSingleLine(self.title_row, text=year_text, font=ctk.CTkFont(family="Segoe UI", size=22), fg_color=TEXT_SECONDARY, bg_color=PANEL_COLOR)
         self.lbl_year.pack(side="left", padx=5)
         
         # FSK and Genre Row
@@ -557,12 +639,12 @@ class DetailOverlay(ctk.CTkFrame):
         self.fsk_badge.pack(side="left")
         
         genre_str = self.movie.get("genre_richtung", "k.A.")
-        self.lbl_genres = ctk.CTkLabel(self.meta_row, text=f"  |  {genre_str}", font=ctk.CTkFont(family="Segoe UI", size=13), text_color=TEXT_SECONDARY)
+        self.lbl_genres = SelectableSingleLine(self.meta_row, text=f"  |  {genre_str}", font=ctk.CTkFont(family="Segoe UI", size=13), fg_color=TEXT_SECONDARY, bg_color=PANEL_COLOR)
         self.lbl_genres.pack(side="left")
         
         # Regisseur
-        self.lbl_director = ctk.CTkLabel(self.right_col, text=f"Regisseur: {self.movie.get('regisseur', 'k.A.')}",
-                                         font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=TEXT_PRIMARY)
+        self.lbl_director = SelectableSingleLine(self.right_col, text=f"Regisseur: {self.movie.get('regisseur', 'k.A.')}",
+                                                 font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), fg_color=TEXT_PRIMARY, bg_color=PANEL_COLOR)
         self.lbl_director.pack(anchor="w", pady=(0, 10))
         
         # Description
@@ -570,16 +652,16 @@ class DetailOverlay(ctk.CTkFrame):
         self.lbl_desc_title.pack(anchor="w", pady=(5, 2))
         
         desc_text = self.movie.get("handlung_beschreibung", "Keine Beschreibung.")
-        self.txt_desc = ctk.CTkLabel(self.right_col, text=desc_text, font=ctk.CTkFont(family="Segoe UI", size=12), text_color=TEXT_PRIMARY, justify="left", wraplength=550)
-        self.txt_desc.pack(anchor="w", pady=(0, 15))
+        self.txt_desc = SelectableLabel(self.right_col, text=desc_text, font=ctk.CTkFont(family="Segoe UI", size=12), fg_color=TEXT_PRIMARY, bg_color=PANEL_COLOR)
+        self.txt_desc.pack(anchor="w", fill="x", pady=(0, 15))
         
         # Cast
         self.lbl_cast_title = ctk.CTkLabel(self.right_col, text="Schauspieler / Besetzung", font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"), text_color=ACCENT_COLOR)
         self.lbl_cast_title.pack(anchor="w", pady=(5, 2))
         
         cast_text = self.movie.get("schauspieler_cast", "Keine Angaben.")
-        self.txt_cast = ctk.CTkLabel(self.right_col, text=cast_text, font=ctk.CTkFont(family="Segoe UI", size=12), text_color=TEXT_PRIMARY, justify="left", wraplength=550)
-        self.txt_cast.pack(anchor="w", pady=(0, 15))
+        self.txt_cast = SelectableLabel(self.right_col, text=cast_text, font=ctk.CTkFont(family="Segoe UI", size=12), fg_color=TEXT_PRIMARY, bg_color=PANEL_COLOR)
+        self.txt_cast.pack(anchor="w", fill="x", pady=(0, 15))
         
         # Synchronsprecher
         self.lbl_sync_title = ctk.CTkLabel(self.right_col, text="Deutsche Synchronsprecher", font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"), text_color=ACCENT_COLOR)
@@ -589,9 +671,9 @@ class DetailOverlay(ctk.CTkFrame):
         if not sync_text:
             sync_text = "Keine Angaben vorhanden. Klicken Sie unten auf 'Bearbeiten', um Synchronsprecher einzutragen."
             
-        self.txt_sync = ctk.CTkLabel(self.right_col, text=sync_text, font=ctk.CTkFont(family="Segoe UI", size=12, slant="italic" if not self.movie.get("deutsche_synchronsprecher") else "roman"),
-                                     text_color=TEXT_PRIMARY, justify="left", wraplength=550)
-        self.txt_sync.pack(anchor="w", pady=(0, 20))
+        self.txt_sync = SelectableLabel(self.right_col, text=sync_text, font=ctk.CTkFont(family="Segoe UI", size=12, slant="italic" if not self.movie.get("deutsche_synchronsprecher") else "roman"),
+                                     fg_color=TEXT_PRIMARY, bg_color=PANEL_COLOR)
+        self.txt_sync.pack(anchor="w", fill="x", pady=(0, 20))
         
         # Discord Embed Share Section
         self.lbl_discord_title = ctk.CTkLabel(self.right_col, text="Discord Share-Beschreibung", font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"), text_color="#5865F2") # Discord Blue
@@ -611,8 +693,8 @@ class DetailOverlay(ctk.CTkFrame):
         # Generate Discord Text
         self.discord_text = self._generate_discord_text()
         
-        self.lbl_discord_preview = ctk.CTkLabel(self.discord_content_frame, text=self.discord_text, font=ctk.CTkFont(family="Consolas", size=11), text_color="#DCDDDE", justify="left", wraplength=480)
-        self.lbl_discord_preview.pack(anchor="w")
+        self.lbl_discord_preview = SelectableLabel(self.discord_content_frame, text=self.discord_text, font=ctk.CTkFont(family="Consolas", size=11), fg_color="#DCDDDE", bg_color="#2F3136")
+        self.lbl_discord_preview.pack(anchor="w", fill="x")
         
         # Copy Button
         self.btn_copy_discord = ctk.CTkButton(self.discord_content_frame, text="📋 Discord-Text kopieren", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
@@ -639,9 +721,9 @@ class DetailOverlay(ctk.CTkFrame):
         row = ctk.CTkFrame(self.quick_info, fg_color="transparent")
         row.pack(fill="x", pady=4, padx=8)
         lbl_field = ctk.CTkLabel(row, text=label, font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color=TEXT_SECONDARY, width=110, anchor="w")
-        lbl_field.pack(side="left")
-        lbl_val = ctk.CTkLabel(row, text=val, font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_PRIMARY, wraplength=130, justify="left", anchor="w")
-        lbl_val.pack(side="left", fill="x", expand=True)
+        lbl_field.pack(side="left", anchor="n")
+        lbl_val = SelectableLabel(row, text=val, font=ctk.CTkFont(family="Segoe UI", size=11), fg_color=TEXT_PRIMARY, bg_color="#181822")
+        lbl_val.pack(side="left", fill="x", expand=True, anchor="n")
 
     def _edit_clicked(self):
         self.on_edit_callback(self.movie)
@@ -723,7 +805,6 @@ class DetailOverlay(ctk.CTkFrame):
             messagebox.showerror("Fehler", f"Fehler beim Speichern des Plakats auf dem Desktop: {e}")
 
     def _generate_discord_text(self) -> str:
-        import re
         titel = self.movie.get("titel", "Unbekannt")
         jahr = self.movie.get("jahr")
         jahr_str = f" ({jahr})" if jahr else ""
@@ -731,25 +812,50 @@ class DetailOverlay(ctk.CTkFrame):
         laufzeit = self.movie.get("laufzeit_min", 0)
         fsk = self.movie.get("fsk", "k.A.")
         regisseur = self.movie.get("regisseur", "k.A.")
-        cast = self.movie.get("schauspieler_cast", "k.A.")
-        if len(cast) > 120:
-            cast = cast[:117] + "..."
-        beschreibung = self.movie.get("handlung_beschreibung", "")
-        if len(beschreibung) > 300:
-            beschreibung = beschreibung[:297] + "..."
+        cast = self.movie.get("schauspieler_cast", "k.A.").strip()
+        beschreibung = self.movie.get("handlung_beschreibung", "Keine Beschreibung vorhanden.").strip()
+        filmreihe = self.movie.get("filmreihe", "").strip()
+        studio = self.movie.get("produktionsfirma_studio", "k.A.")
+        land = self.movie.get("produktionsland", "k.A.")
+        synchronsprecher = self.movie.get("deutsche_synchronsprecher", "").strip()
+
+        # Format cast blockquotes line-by-line
+        cast_lines = cast.split("\n")
+        cast_formatted = "\n".join([f"> {line}" for line in cast_lines])
+
+        # Format description blockquotes line-by-line
+        desc_lines = beschreibung.split("\n")
+        desc_formatted = "\n".join([f"> {line}" for line in desc_lines])
+
+        lines = [
+            f"**🎬 CinePalast Film-Tipp: {titel}{jahr_str}**",
+            f"> **Genre:** {genres} | **Laufzeit:** {laufzeit} Min. | **FSK:** ab {fsk}",
+            f"> **Regisseur:** {regisseur} | **Studio:** {studio} | **Land:** {land}"
+        ]
+        
+        if filmreihe and filmreihe != "-":
+            lines.append(f"> **Filmreihe:** {filmreihe}")
             
-        discord_msg = (
-            f"**🎬 CinePalast Film-Tipp: {titel}{jahr_str}**\n"
-            f"> **Genre:** {genres} | **Laufzeit:** {laufzeit} Min. | **FSK:** ab {fsk}\n"
-            f"> **Regisseur:** {regisseur}\n"
-            f"> **Besetzung:** {cast}\n"
-            f">\n"
-            f"> 📝 **Handlung:**\n"
-            f"> {beschreibung}\n"
-            f">\n"
+        lines.append(f"> **Besetzung:**")
+        lines.append(cast_formatted)
+        
+        if synchronsprecher and synchronsprecher != "-":
+            sync_formatted = "\n".join([f"> {line}" for line in synchronsprecher.split("\n")])
+            lines.append(f"> **Deutsche Stimmen:**")
+            lines.append(sync_formatted)
+
+        lines.extend([
+            f">",
+            f"> 📝 **Handlung & Beschreibung:**",
+            desc_formatted,
+            f">",
             f"> *Gesendet aus dem CinePalast Manager von Mannis Kinopalast*"
-        )
-        return discord_msg
+        ])
+        
+        text = "\n".join(lines)
+        if len(text) > 1990:
+            text = text[:1987] + "..."
+        return text
 
     def _copy_discord_clicked(self):
         from tkinter import messagebox
@@ -2208,15 +2314,15 @@ class CinePalastApp(ctk.CTk):
         
         scrollbar.configure(command=self.tree.yview)
         
-        self.tree.heading("id", text="ID")
-        self.tree.heading("titel", text="Titel / Name")
-        self.tree.heading("jahr", text="Jahr")
-        self.tree.heading("genre", text="Genre")
-        self.tree.heading("laufzeit", text="Laufzeit (Min.)")
-        self.tree.heading("fsk", text="FSK")
-        self.tree.heading("regisseur", text="Regisseur")
-        self.tree.heading("filmreihe", text="Filmreihe")
-        self.tree.heading("land", text="Land")
+        self.tree.heading("id", text="ID", command=lambda: self._sort_table_column("id", False))
+        self.tree.heading("titel", text="Titel / Name", command=lambda: self._sort_table_column("titel", False))
+        self.tree.heading("jahr", text="Jahr", command=lambda: self._sort_table_column("jahr", False))
+        self.tree.heading("genre", text="Genre", command=lambda: self._sort_table_column("genre", False))
+        self.tree.heading("laufzeit", text="Laufzeit (Min.)", command=lambda: self._sort_table_column("laufzeit", False))
+        self.tree.heading("fsk", text="FSK", command=lambda: self._sort_table_column("fsk", False))
+        self.tree.heading("regisseur", text="Regisseur", command=lambda: self._sort_table_column("regisseur", False))
+        self.tree.heading("filmreihe", text="Filmreihe", command=lambda: self._sort_table_column("filmreihe", False))
+        self.tree.heading("land", text="Land", command=lambda: self._sort_table_column("land", False))
         
         self.tree.column("id", width=40, minwidth=40, anchor="center")
         self.tree.column("titel", width=220, minwidth=150, anchor="w")
@@ -2232,6 +2338,54 @@ class CinePalastApp(ctk.CTk):
         
         self.tree.bind("<Double-1>", self._on_table_double_click)
         self._refresh_table_data()
+
+    def _sort_table_column(self, col, reverse):
+        """Sorts the Treeview column by either string or integer values dynamically."""
+        l = [(self.tree.set(k, col), k) for k in self.tree.get_children('')]
+        
+        def sort_key(item):
+            val = item[0]
+            if val == "k.A." or val == "-" or not val:
+                if col in ("id", "jahr", "laufzeit"):
+                    return -1 if not reverse else 999999
+                else:
+                    return "" if not reverse else "zzzzzzzzzzzz"
+
+            if col == "id":
+                try: return int(val)
+                except ValueError: return -1 if not reverse else 999999
+            elif col == "jahr":
+                try: return int(val)
+                except ValueError: return -1 if not reverse else 999999
+            elif col == "laufzeit":
+                val_clean = val.replace(" Min.", "").strip()
+                try: return int(val_clean)
+                except ValueError: return -1 if not reverse else 999999
+            else:
+                return val.lower()
+
+        l.sort(key=sort_key, reverse=reverse)
+
+        for index, (val, k) in enumerate(l):
+            self.tree.move(k, '', index)
+
+        columns_display = {
+            "id": "ID",
+            "titel": "Titel / Name",
+            "jahr": "Jahr",
+            "genre": "Genre",
+            "laufzeit": "Laufzeit (Min.)",
+            "fsk": "FSK",
+            "regisseur": "Regisseur",
+            "filmreihe": "Filmreihe",
+            "land": "Land"
+        }
+        for c, text in columns_display.items():
+            if c == col:
+                arrow = " ▼" if reverse else " ▲"
+                self.tree.heading(c, text=text + arrow, command=lambda curr_c=c: self._sort_table_column(curr_c, not reverse))
+            else:
+                self.tree.heading(c, text=text, command=lambda curr_c=c: self._sort_table_column(curr_c, False))
 
     def _on_table_double_click(self, event):
         selection = self.tree.selection()
