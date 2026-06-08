@@ -1027,18 +1027,10 @@ class SettingsOverlay(ctk.CTkFrame):
         self.btn_cancel.pack(side="left", padx=10)
         
         # Credits in the bottom-left corner
-        self.credits_frame = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.credits_frame.place(relx=0.07, rely=0.93, anchor="sw")
-        
-        self.lbl_creator = ctk.CTkLabel(self.credits_frame, text="Creator: ®TENTIX LLC", 
-                                        font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), 
-                                        text_color=TEXT_SECONDARY, anchor="w", justify="left")
-        self.lbl_creator.pack(anchor="w")
-        
-        self.lbl_idea = ctk.CTkLabel(self.credits_frame, text="Ideenhaber: Martin K.", 
-                                     font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), 
-                                     text_color=TEXT_SECONDARY, anchor="w", justify="left")
-        self.lbl_idea.pack(anchor="w")
+        self.lbl_credits = ctk.CTkLabel(self.container, text="Creator: ®TENTIX LLC\nFounder: Martin K.", 
+                                        font=ctk.CTkFont(family="Segoe UI", size=9, weight="bold"), 
+                                        text_color=TEXT_SECONDARY, anchor="sw", justify="left")
+        self.lbl_credits.place(relx=0.02, rely=0.98, anchor="sw")
         
     def _test_key(self):
         test_key = self.entry_key.get().strip()
@@ -1099,7 +1091,7 @@ class SettingsOverlay(ctk.CTkFrame):
             status_text = "Status: Keine Schlüssel eingegeben"
             
         self.lbl_status.configure(text=status_text, text_color=status_color)
-            
+
     def _save_key(self):
         new_key = self.entry_key.get().strip()
         new_github = self.entry_github.get().strip()
@@ -1113,14 +1105,13 @@ class SettingsOverlay(ctk.CTkFrame):
         selected_theme = theme_display_map.get(self.theme_option.get(), "cyan")
         selected_view = self.view_option.get()
         
-        cfg = load_config()
-        cfg["theme"] = selected_theme
-        cfg["default_view"] = selected_view
-        save_config(cfg)
+        config = load_config()
+        config["theme"] = selected_theme
+        config["default_view"] = selected_view
+        save_config(config)
         
-        # Close the overlay first, and schedule the theme reload to avoid TclError/crashes
-        # during the execution context of the destroyed widget.
         parent = self.parent
+        parent.view_mode = selected_view
         self.on_close_callback()
         
         def apply_and_notify():
@@ -1131,7 +1122,7 @@ class SettingsOverlay(ctk.CTkFrame):
                 print(f"Error re-applying theme: {e}")
                 
         parent.after(10, apply_and_notify)
- 
+
     def _reset_database_clicked(self):
         import sqlite3
         if messagebox.askyesno("Datenbank zurücksetzen", "Möchten Sie die gesamte lokale Filmdatenbank wirklich leeren?\n\nAlle importierten Filme werden dauerhaft gelöscht."):
@@ -1887,8 +1878,8 @@ class CinePalastApp(ctk.CTk):
         # 3. Setup Scrollable Media Grid Layout
         self.gallery_scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
         
-        # Bind resize configuration to enable responsive reflow columns
-        self.gallery_scroll.bind("<Configure>", self._on_gallery_resize)
+        # Bind resize configuration on the main window to enable responsive reflow columns
+        self.bind("<Configure>", self._on_gallery_resize)
         
         # Placeholder for overlays
         self.active_overlay = None
@@ -1900,8 +1891,14 @@ class CinePalastApp(ctk.CTk):
 
     def reload_theme(self):
         """Reloads the theme configuration from config.json and updates the GUI live without restarting."""
-        global BG_COLOR, PANEL_COLOR, ACCENT_COLOR, ACCENT_HOVER, CARD_BORDER, IMAGE_CACHE
+        global BG_COLOR, PANEL_COLOR, ACCENT_COLOR, ACCENT_HOVER, CARD_BORDER, IMAGE_CACHE, _theme
         
+        # Temporarily unbind resize event to prevent layout loop during destruction/recreation
+        try:
+            self.unbind("<Configure>")
+        except Exception:
+            pass
+            
         # 1. Reload the theme string from config
         from api import load_config
         theme_str = "cyan"
@@ -1909,6 +1906,7 @@ class CinePalastApp(ctk.CTk):
             theme_str = load_config().get("theme", "cyan").strip().lower()
         except Exception:
             pass
+        _theme = theme_str
             
         # 2. Reset the global colors
         if theme_str == "cyan":
@@ -1958,13 +1956,18 @@ class CinePalastApp(ctk.CTk):
             
         self._setup_top_panel()
         self.gallery_scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self.gallery_scroll.bind("<Configure>", self._on_gallery_resize)
-        
-        # Reset grid col count to force reflow on next configure
-        self.last_width = 0
         
         # Re-initialize view mode
         self._on_view_changed(self.view_mode)
+        
+        # Force a layout update so all geometry is calculated
+        self.update_idletasks()
+        
+        # Set last_width to current width to prevent redundant regrid on next resize configure
+        self.last_width = self.winfo_width()
+        
+        # Re-bind the configure resize handler
+        self.bind("<Configure>", self._on_gallery_resize)
 
     def _load_app_icon(self):
         """Checks the project root for icon.ico or assets/DTB.png and applies it natively."""
@@ -2132,6 +2135,10 @@ class CinePalastApp(ctk.CTk):
 
     def _on_gallery_resize(self, event):
         """Triggers dynamic reflow of grid columns when window scales."""
+        # Only process configure events that target the main window itself
+        if event.widget != self and str(event.widget) != ".":
+            return
+            
         width = event.width
         if abs(width - self.last_width) > 20: # Debounce/threshold
             self.last_width = width

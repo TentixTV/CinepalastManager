@@ -9,14 +9,24 @@ from typing import List, Dict, Optional
 CONFIG_FILE = "config.json"
 
 def load_config() -> dict:
-    """Loads the config dictionary from config.json. Returns empty dict if not set."""
+    """Loads the config dictionary from config.json. Returns default config if the file does not exist."""
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
         except Exception:
             pass
-    return {}
+            
+    # Initialize config.json with the default TMDB API key if it doesn't exist
+    default_config = {"api_key": "c137e57399018df3c480f56ce1db17f8"}
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(default_config, f, indent=4, ensure_ascii=False)
+    except Exception:
+        pass
+    return default_config
 
 def save_config(config_data: dict):
     """Saves the config dictionary to config.json."""
@@ -24,11 +34,12 @@ def save_config(config_data: dict):
         json.dump(config_data, f, indent=4, ensure_ascii=False)
 
 def load_api_key() -> str:
-    """Loads the TMDB API key from config.json, falling back to the hardcoded default key."""
-    key = load_config().get("api_key", "").strip()
-    if not key:
-        return "c137e57399018df3c480f56ce1db17f8"
-    return key
+    """Loads the TMDB API key from config.json."""
+    cfg = load_config()
+    if "api_key" not in cfg:
+        cfg["api_key"] = "c137e57399018df3c480f56ce1db17f8"
+        save_config(cfg)
+    return cfg.get("api_key", "").strip()
 
 def save_api_key(api_key: str):
     """Saves the TMDB API key to config.json, preserving other settings."""
