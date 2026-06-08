@@ -883,8 +883,7 @@ class UpdateDownloadOverlay(ctk.CTkFrame):
     Overlay indicating update download progress.
     """
     def __init__(self, parent):
-
-        super().__init__(parent, fg_color="rgba(11, 11, 15, 0.95)")
+        super().__init__(parent, fg_color=BG_COLOR)
         self.parent = parent
         
         self.container = ctk.CTkFrame(self, fg_color=PANEL_COLOR, border_width=1, border_color=CARD_BORDER, corner_radius=12)
@@ -914,7 +913,7 @@ class SettingsOverlay(ctk.CTkFrame):
     Fully responsive stacked layout with dynamic visual accent theme mapping.
     """
     def __init__(self, parent, tmdb_client, on_close_callback):
-        super().__init__(parent, fg_color="rgba(8, 8, 12, 0.96)")
+        super().__init__(parent, fg_color=BG_COLOR)
         self.tmdb_client = tmdb_client
         self.on_close_callback = on_close_callback
         self.parent = parent
