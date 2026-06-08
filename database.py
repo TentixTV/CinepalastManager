@@ -163,9 +163,16 @@ class DatabaseManager:
 
     def _ui_to_db(self, movie_dict: dict) -> dict:
         """Translates UI representation to SQLite column names."""
+        titel = movie_dict.get("titel", "").strip()
+        jahr = movie_dict.get("jahr")
+        if jahr:
+            year_suffix = f"({jahr})"
+            if year_suffix not in titel:
+                titel = f"{titel} {year_suffix}"
+
         return {
-            "Name": movie_dict.get("titel", ""),
-            "Jahr": movie_dict.get("jahr"),
+            "Name": titel,
+            "Jahr": jahr,
             "Schauspieler": movie_dict.get("schauspieler_cast", ""),
             "Genre": movie_dict.get("genre_richtung", ""),
             "Laufzeit_min": movie_dict.get("laufzeit_min", 0),
@@ -179,6 +186,7 @@ class DatabaseManager:
             "Poster_Pfad": movie_dict.get("poster_pfad", ""),
             "Banner_Pfad": movie_dict.get("banner_pfad", "")
         }
+
 
     def _db_to_ui(self, db_row: dict) -> dict:
         """Translates SQLite columns to UI representation."""

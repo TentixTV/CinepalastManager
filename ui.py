@@ -29,6 +29,8 @@ ACCENT_HOVER = "#00B3C2"        # Darker cyan
 TEXT_PRIMARY = "#FFFFFF"        # Pure white
 TEXT_SECONDARY = "#A0A0AA"      # Muted gray
 CARD_BORDER = "#1E1E26"         # Subtle card border
+APP_VERSION = "1.0.0"
+
 
 if _theme == "red":
     ACCENT_COLOR = "#EF4444"
@@ -560,46 +562,86 @@ class DetailOverlay(ctk.CTkFrame):
             self.on_delete_callback(self.movie["id"])
 
 
+class UpdateDownloadOverlay(ctk.CTkFrame):
+    """
+    Overlay indicating update download progress.
+    """
+    def __init__(self, parent):
+
+        super().__init__(parent, fg_color="rgba(11, 11, 15, 0.95)")
+        self.parent = parent
+        
+        self.container = ctk.CTkFrame(self, fg_color=PANEL_COLOR, border_width=1, border_color=CARD_BORDER, corner_radius=12)
+        self.container.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.5, relheight=0.3)
+        
+        self.title_lbl = ctk.CTkLabel(self.container, text="CINEPALAST LIVE-UPDATE", font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold"), text_color=ACCENT_COLOR)
+        self.title_lbl.pack(pady=(20, 10))
+        
+        self.status_lbl = ctk.CTkLabel(self.container, text="Lade Update herunter... 0%", font=ctk.CTkFont(family="Segoe UI", size=13), text_color=TEXT_PRIMARY)
+        self.status_lbl.pack(pady=10)
+        
+        self.progress = ctk.CTkProgressBar(self.container, progress_color=ACCENT_COLOR, fg_color="#1E1E26", height=12)
+        self.progress.pack(fill="x", padx=40, pady=10)
+        self.progress.set(0.0)
+        
+    def update_progress(self, downloaded, total_size):
+        percentage = (downloaded / total_size) * 100 if total_size > 0 else 0
+        dl_mb = downloaded / (1024 * 1024)
+        tot_mb = total_size / (1024 * 1024)
+        self.status_lbl.configure(text=f"Lade Update herunter... {int(percentage)}% ({dl_mb:.1f} MB / {tot_mb:.1f} MB)")
+        self.progress.set(downloaded / total_size if total_size > 0 else 0)
+
+
 class SettingsOverlay(ctk.CTkFrame):
     """
-    Overlay to enter, test, and save the TMDB API key.
+    Overlay to enter, test, and save the TMDB API key and GitHub Token.
     """
     def __init__(self, parent, tmdb_client, on_close_callback):
         super().__init__(parent, fg_color="BG_COLOR")
         self.tmdb_client = tmdb_client
         self.on_close_callback = on_close_callback
+        self.parent = parent
         
         self.container = ctk.CTkFrame(self, fg_color=PANEL_COLOR, border_width=1, border_color=CARD_BORDER, corner_radius=16)
-        self.container.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.6, relheight=0.6)
+        self.container.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.6, relheight=0.75)
         
-        self.lbl_title = ctk.CTkLabel(self.container, text="TMDB API EINSTELLUNGEN", font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"), text_color=ACCENT_COLOR)
+        self.lbl_title = ctk.CTkLabel(self.container, text="CINEPALAST EINSTELLUNGEN", font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"), text_color=ACCENT_COLOR)
         self.lbl_title.pack(pady=20)
         
         # Info Box
-        info_text = ("Um Filminformationen automatisch über das Internet zu beziehen, "
-                     "wird ein TMDB (The Movie Database) API-Schlüssel benötigt.\n"
-                     "Sie können einen kostenlosen Account auf themoviedb.org erstellen und "
-                     "dort Ihren API-Key beantragen.")
+        info_text = ("Geben Sie Ihren TMDB API-Schlüssel für Filminformationen und Ihren\n"
+                     "GitHub Personal Access Token für Live-Updates aus dem Repository ein.")
         self.lbl_info = ctk.CTkLabel(self.container, text=info_text, font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_SECONDARY, justify="center")
         self.lbl_info.pack(pady=(0, 15), padx=20)
         
-        # Key Input
+        # TMDB Key Input Row
         self.input_frame = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.input_frame.pack(fill="x", padx=40, pady=10)
+        self.input_frame.pack(fill="x", padx=40, pady=8)
         
-        self.lbl_key = ctk.CTkLabel(self.input_frame, text="API-Schlüssel:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY)
+        self.lbl_key = ctk.CTkLabel(self.input_frame, text="TMDB Key:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY, width=100, anchor="w")
         self.lbl_key.pack(side="left", padx=(0, 10))
         
         self.entry_key = ctk.CTkEntry(self.input_frame, fg_color="#1E1E26", border_color=CARD_BORDER, text_color=TEXT_PRIMARY, show="*")
         self.entry_key.pack(side="left", fill="x", expand=True)
-        # Prepopulate key
         self.entry_key.insert(0, self.tmdb_client.get_api_key())
+        
+        # GitHub Token Input Row
+        self.github_frame = ctk.CTkFrame(self.container, fg_color="transparent")
+        self.github_frame.pack(fill="x", padx=40, pady=8)
+        
+        self.lbl_github = ctk.CTkLabel(self.github_frame, text="GitHub Token:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY, width=100, anchor="w")
+        self.lbl_github.pack(side="left", padx=(0, 10))
+        
+        self.entry_github = ctk.CTkEntry(self.github_frame, fg_color="#1E1E26", border_color=CARD_BORDER, text_color=TEXT_PRIMARY, show="*")
+        self.entry_github.pack(side="left", fill="x", expand=True)
+        from api import load_github_token
+        self.entry_github.insert(0, load_github_token())
         
         # Theme Choice Row
         self.theme_frame = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.theme_frame.pack(fill="x", padx=40, pady=10)
+        self.theme_frame.pack(fill="x", padx=40, pady=8)
         
-        self.lbl_theme = ctk.CTkLabel(self.theme_frame, text="Design-Farbe:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY)
+        self.lbl_theme = ctk.CTkLabel(self.theme_frame, text="Design-Farbe:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY, width=100, anchor="w")
         self.lbl_theme.pack(side="left", padx=(0, 10))
         
         self.theme_option = ctk.CTkOptionMenu(self.theme_frame, values=["Cyan", "Rot", "Blau", "Lila", "Schwarz"],
@@ -608,19 +650,28 @@ class SettingsOverlay(ctk.CTkFrame):
                                               dropdown_hover_color="#2A2A35", text_color=TEXT_PRIMARY)
         self.theme_option.pack(side="left", fill="x", expand=True)
         
-        # Prepopulate theme dropdown
         theme_map = {"cyan": "Cyan", "red": "Rot", "blue": "Blau", "purple": "Lila", "black": "Schwarz"}
         current_theme_display = theme_map.get(_theme, "Cyan")
         self.theme_option.set(current_theme_display)
         
-        # Status Label
-        self.lbl_status = ctk.CTkLabel(self.container, text="Status: Prüfe API-Schlüssel...", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color=TEXT_SECONDARY)
-        self.lbl_status.pack(pady=5)
-        self.update_status_label()
+        # Database Options Row
+        self.db_frame = ctk.CTkFrame(self.container, fg_color="transparent")
+        self.db_frame.pack(fill="x", padx=40, pady=8)
         
-        # Actions
+        self.lbl_db_opt = ctk.CTkLabel(self.db_frame, text="Datenbank:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY, width=100, anchor="w")
+        self.lbl_db_opt.pack(side="left", padx=(0, 10))
+        
+        self.btn_reset_db = ctk.CTkButton(self.db_frame, text="Datenbank leeren / neu starten", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                                          fg_color="#ef4444", text_color="#FFFFFF", hover_color="#dc2626", height=28, command=self._reset_database_clicked)
+        self.btn_reset_db.pack(side="left", fill="x", expand=True)
+        
+        # Status Label
+        self.lbl_status = ctk.CTkLabel(self.container, text="Status: Nicht getestet", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color=TEXT_SECONDARY)
+        self.lbl_status.pack(pady=5)
+        
+        # Actions Row
         self.btn_row = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.btn_row.pack(pady=20)
+        self.btn_row.pack(pady=15)
         
         self.btn_test = ctk.CTkButton(self.btn_row, text="Testen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
                                       fg_color="transparent", text_color=TEXT_PRIMARY, border_color=ACCENT_COLOR, border_width=1,
@@ -635,45 +686,73 @@ class SettingsOverlay(ctk.CTkFrame):
                                         fg_color="transparent", text_color=TEXT_SECONDARY, hover_color="#2A2A35", command=self.on_close_callback)
         self.btn_cancel.pack(side="left", padx=10)
         
-    def update_status_label(self):
-        key = self.entry_key.get().strip()
-        if not key:
-            self.lbl_status.configure(text="Status: Kein API-Schlüssel eingegeben", text_color="#ef4444")
-        else:
-            self.lbl_status.configure(text="Status: Nicht getestet", text_color=TEXT_SECONDARY)
-            
     def _test_key(self):
         test_key = self.entry_key.get().strip()
-        if not test_key:
-            self.lbl_status.configure(text="Status: Bitte geben Sie zuerst einen Schlüssel ein", text_color="#ef4444")
-            return
-            
-        self.lbl_status.configure(text="Status: Teste Verbindung...", text_color=TEXT_SECONDARY)
+        test_github = self.entry_github.get().strip()
+        
+        self.lbl_status.configure(text="Status: Teste Verbindungen...", text_color=TEXT_SECONDARY)
         self.update()
         
-        # Briefly query config validation
-        try:
-            url = "https://api.themoviedb.org/3/configuration"
-            import requests
-            if len(test_key) > 50 or test_key.startswith("eyJ"):
-                headers = {"Authorization": f"Bearer {test_key}"}
-                params = {}
-            else:
-                headers = {}
-                params = {"api_key": test_key}
+        tmdb_ok = False
+        github_ok = False
+        tmdb_msg = ""
+        github_msg = ""
+        
+        # Test TMDB Key
+        if test_key:
+            try:
+                url = "https://api.themoviedb.org/3/configuration"
+                import requests as req
+                if len(test_key) > 50 or test_key.startswith("eyJ"):
+                    headers = {"Authorization": f"Bearer {test_key}"}
+                    params = {}
+                else:
+                    headers = {}
+                    params = {"api_key": test_key}
+                
+                resp = req.get(url, headers=headers, params=params, timeout=5)
+                if resp.status_code == 200:
+                    tmdb_ok = True
+                    tmdb_msg = "TMDB Key OK"
+                else:
+                    tmdb_msg = f"TMDB Fehler ({resp.status_code})"
+            except Exception as e:
+                tmdb_msg = f"TMDB Fehler ({str(e)})"
+        else:
+            tmdb_msg = "Kein TMDB Key"
+
+        # Test GitHub Token
+        if test_github:
+            try:
+                url = "https://api.github.com/repos/TentixTV/CinepalastManager"
+                headers = {"Authorization": f"token {test_github}"}
+                import requests as req
+                resp = req.get(url, headers=headers, timeout=5)
+                if resp.status_code == 200:
+                    github_ok = True
+                    github_msg = "GitHub Token OK"
+                else:
+                    github_msg = f"GitHub Fehler ({resp.status_code})"
+            except Exception as e:
+                github_msg = f"GitHub Fehler ({str(e)})"
+        else:
+            github_msg = "Kein GitHub Token"
+
+        status_text = f"Status: {tmdb_msg} | {github_msg}"
+        status_color = "#22c55e" if (tmdb_ok or not test_key) and (github_ok or not test_github) else "#ef4444"
+        if not test_key and not test_github:
+            status_color = "#ef4444"
+            status_text = "Status: Keine Schlüssel eingegeben"
             
-            resp = requests.get(url, headers=headers, params=params, timeout=5)
-            if resp.status_code == 200:
-                self.lbl_status.configure(text="Status: Verbindung erfolgreich! Gültiger Schlüssel.", text_color="#22c55e")
-            else:
-                self.lbl_status.configure(text=f"Status: Fehler! TMDB API meldet Code {resp.status_code}", text_color="#ef4444")
-        except Exception as e:
-            self.lbl_status.configure(text=f"Status: Netzwerkfehler ({str(e)})", text_color="#ef4444")
+        self.lbl_status.configure(text=status_text, text_color=status_color)
             
     def _save_key(self):
         new_key = self.entry_key.get().strip()
-        from api import save_api_key, load_config, save_config
+        new_github = self.entry_github.get().strip()
+        
+        from api import save_api_key, save_github_token, load_config, save_config
         save_api_key(new_key)
+        save_github_token(new_github)
         
         # Save theme configuration
         theme_display_map = {"Cyan": "cyan", "Rot": "red", "Blau": "blue", "Lila": "purple", "Schwarz": "black"}
@@ -685,6 +764,22 @@ class SettingsOverlay(ctk.CTkFrame):
         
         messagebox.showinfo("Gespeichert", "Einstellungen wurden erfolgreich gespeichert.\n\nBitte starten Sie die App neu, um das neue Design anzuwenden.")
         self.on_close_callback()
+ 
+    def _reset_database_clicked(self):
+        import sqlite3
+        if messagebox.askyesno("Datenbank zurücksetzen", "Möchten Sie die gesamte lokale Filmdatenbank wirklich leeren?\n\nAlle importierten Filme werden dauerhaft gelöscht."):
+            try:
+                conn = sqlite3.connect(self.parent.db_manager.db_path)
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM media;")
+                conn.commit()
+                conn.close()
+                
+                self.parent.refresh_gallery()
+                messagebox.showinfo("Erfolgreich", "Die lokale Datenbank wurde erfolgreich geleert. Sie ist jetzt komplett leer und bereit für Ihre eigenen Filme!")
+            except Exception as e:
+                messagebox.showerror("Fehler", f"Fehler beim Leeren der Datenbank: {str(e)}")
+
 
 
 class AddMovieOverlay(ctk.CTkFrame):
@@ -777,7 +872,13 @@ class AddMovieOverlay(ctk.CTkFrame):
     def _perform_online_search(self):
         query = self.entry_search.get().strip()
         if not query:
+            # Clear previous results
+            for widget in self.results_scroll.winfo_children():
+                widget.destroy()
+            self.results_empty = ctk.CTkLabel(self.results_scroll, text="Bitte geben Sie einen Filmtitel ein\nund klicken Sie auf Suchen.", font=ctk.CTkFont(family="Segoe UI", size=12, italic=True), text_color=TEXT_SECONDARY)
+            self.results_empty.pack(expand=True, pady=100)
             return
+
             
         # Clear previous results
         for widget in self.results_scroll.winfo_children():
@@ -1403,6 +1504,8 @@ class CinePalastApp(ctk.CTk):
         
         # 4. First load
         self.refresh_gallery()
+        self.after(1000, self.check_for_updates_background)
+
         
     def _load_app_icon(self):
         """Checks the project root for icon.ico or assets/DTB.png and applies it natively."""
@@ -1442,8 +1545,9 @@ class CinePalastApp(ctk.CTk):
         
         self.lbl_app_title = ctk.CTkLabel(self.title_frame, text="CINEPALAST MANAGER", font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"), text_color=ACCENT_COLOR)
         self.lbl_app_title.pack(anchor="w")
-        self.lbl_app_sub = ctk.CTkLabel(self.title_frame, text="Mannis Kinopalast", font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_SECONDARY)
+        self.lbl_app_sub = ctk.CTkLabel(self.title_frame, text=f"Mannis Kinopalast v{APP_VERSION}", font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_SECONDARY)
         self.lbl_app_sub.pack(anchor="w")
+
         
         # 2. Top Buttons Block (Right - packed first so it claims its space)
         self.btn_frame = ctk.CTkFrame(self.top_panel, fg_color="transparent")
@@ -1808,3 +1912,82 @@ class CinePalastApp(ctk.CTk):
                 m.get("filmreihe", "-") or "-",
                 m.get("produktionsland", "k.A.")
             ))
+
+    def check_for_updates_background(self):
+        """Spawns a background thread to check for updates from GitHub."""
+        def run_check():
+            from api import check_for_update, load_github_token
+            token = load_github_token()
+            if not token:
+                print("GitHub Token nicht konfiguriert - Live-Update deaktiviert.")
+                return
+            
+            try:
+                remote_version = check_for_update(APP_VERSION)
+                if remote_version:
+                    # Found update! Trigger prompt on main thread
+                    self.after(0, lambda: self.prompt_update(remote_version))
+            except Exception as e:
+                print(f"Fehler bei automatischem Update-Check: {e}")
+                
+        threading.Thread(target=run_check, daemon=True).start()
+
+    def prompt_update(self, remote_version: str):
+        """Prompts the user if they want to install the update."""
+        msg = f"Ein neues Update (Version {remote_version}) ist auf GitHub verfügbar!\n\n" \
+              f"Möchten Sie CinePalast Setup jetzt herunterladen, installieren und die App neu starten?"
+        if messagebox.askyesno("Update Verfügbar", msg):
+            self.start_update_download()
+
+    def start_update_download(self):
+        """Shows download overlay and starts background update thread."""
+        self.update_overlay = UpdateDownloadOverlay(self)
+        self.update_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.update()
+        
+        def run_download():
+            import os
+            import sys
+            from api import load_github_token, download_update_installer
+            token = load_github_token()
+            dest_exe = "CinePalastSetup_Update.exe"
+            
+            # Progress callback to update UI thread
+            def progress_cb(downloaded, total_size):
+                self.after(0, lambda: self.update_overlay.update_progress(downloaded, total_size))
+                
+            try:
+                download_update_installer(token, dest_exe, progress_cb)
+                
+                # Check if file exists and has size
+                if os.path.exists(dest_exe) and os.path.getsize(dest_exe) > 1024 * 1024:
+                    self.after(0, lambda: self.finalize_update(dest_exe))
+                else:
+                    raise Exception("Heruntergeladene Datei ist ungültig oder zu klein.")
+            except Exception as e:
+                self.after(0, lambda err=e: self.handle_update_error(err))
+                
+        threading.Thread(target=run_download, daemon=True).start()
+
+    def finalize_update(self, exe_path: str):
+        """Launches the downloaded installer and shuts down the app."""
+        if hasattr(self, 'update_overlay') and self.update_overlay.winfo_exists():
+            self.update_overlay.destroy()
+        
+        # Confirm and start installer
+        messagebox.showinfo("Update bereit", "Das Update wurde erfolgreich heruntergeladen. "
+                                             "Der Installer wird jetzt gestartet und CinePalast wird geschlossen.")
+        try:
+            import os
+            import sys
+            os.startfile(exe_path)
+            sys.exit(0)
+        except Exception as e:
+            messagebox.showerror("Fehler beim Start", f"Der Installer konnte nicht gestartet werden: {e}")
+
+    def handle_update_error(self, error: Exception):
+        """Cleans up overlay and notifies the user of download error."""
+        if hasattr(self, 'update_overlay') and self.update_overlay.winfo_exists():
+            self.update_overlay.destroy()
+        messagebox.showerror("Update-Fehler", f"Fehler beim Herunterladen des Updates:\n{str(error)}")
+

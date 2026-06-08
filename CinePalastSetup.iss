@@ -38,8 +38,10 @@ Source: "assets\fsk\*"; DestDir: "{app}\assets\fsk"; Flags: ignoreversion recurs
 [Icons]
 ; Verknüpfung im Startmenü erstellen
 Name: "{group}\CinePalast Manager"; Filename: "{app}\CinePalast.exe"
+Name: "{group}\Uninstall CinePalast Manager"; Filename: "{uninstallexe}"
 ; Verknüpfung auf dem Desktop erstellen
 Name: "{commondesktop}\CinePalast Manager"; Filename: "{app}\CinePalast.exe"; Tasks: desktopicon
+
 
 [Run]
 ; Option zum direkten Starten nach der Installation anbieten
