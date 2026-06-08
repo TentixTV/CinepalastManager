@@ -387,7 +387,7 @@ class LoadingOverlay(ctk.CTkFrame):
     An overlay that prevents interaction and shows a loading spinner state.
     """
     def __init__(self, parent, message: str = "Lade Daten... Bitte warten."):
-        super().__init__(parent, fg_color="rgba(11, 11, 15, 0.8)")
+        super().__init__(parent, fg_color="BG_COLOR")
         
         self.container = ctk.CTkFrame(self, fg_color=PANEL_COLOR, border_width=1, border_color=CARD_BORDER, corner_radius=12)
         self.container.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.4, relheight=0.25)
@@ -415,7 +415,7 @@ class DetailOverlay(ctk.CTkFrame):
     Displays rich media detail hierarchy: banner, poster, core fields, cast, description, actions.
     """
     def __init__(self, parent, movie: dict, on_close_callback, on_delete_callback, on_edit_callback):
-        super().__init__(parent, fg_color="rgba(11, 11, 15, 0.95)")
+        super().__init__(parent, fg_color="BG_COLOR")
         self.movie = movie
         self.on_close_callback = on_close_callback
         self.on_delete_callback = on_delete_callback
@@ -431,8 +431,8 @@ class DetailOverlay(ctk.CTkFrame):
         
         # 1. Back button (Semi-transparent floating button on the upper left)
         self.btn_back = ctk.CTkButton(self.content_card, text="← Zurück", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-                                      fg_color="rgba(0, 240, 255, 0.15)", text_color=ACCENT_COLOR, border_color=ACCENT_COLOR, border_width=1,
-                                      hover_color="rgba(0, 240, 255, 0.3)", width=100, height=32, command=self.on_close_callback)
+                                      fg_color="#0F2D37", text_color=ACCENT_COLOR, border_color=ACCENT_COLOR, border_width=1,
+                                      hover_color="#1B4B59", width=100, height=32, command=self.on_close_callback)
         self.btn_back.place(x=15, y=15)
         
         # 2. Movie Wallpaper/Banner
@@ -456,7 +456,7 @@ class DetailOverlay(ctk.CTkFrame):
         self.poster_label.pack(pady=(0, 15))
         
         # Quick info panel under poster
-        self.quick_info = ctk.CTkFrame(self.left_col, fg_color="rgba(255,255,255,0.02)", border_width=1, border_color="rgba(255,255,255,0.05)", corner_radius=8)
+        self.quick_info = ctk.CTkFrame(self.left_col, fg_color="#181822", border_width=1, border_color="#2E2E3A", corner_radius=8)
         self.quick_info.pack(fill="x", pady=5, padx=5)
         
         self.add_quick_info_row("Laufzeit:", f"{self.movie.get('laufzeit_min', 0)} Min.")
@@ -537,7 +537,7 @@ class DetailOverlay(ctk.CTkFrame):
         
         self.btn_edit = ctk.CTkButton(self.action_row, text="Bearbeiten", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
                                       fg_color="transparent", text_color=TEXT_PRIMARY, border_color=CARD_BORDER, border_width=1,
-                                      hover_color="rgba(255, 255, 255, 0.05)", width=120, height=35, command=self._edit_clicked)
+                                      hover_color="#2A2A35", width=120, height=35, command=self._edit_clicked)
         self.btn_edit.pack(side="left", padx=(0, 10))
         
         self.btn_delete = ctk.CTkButton(self.action_row, text="Löschen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
@@ -565,7 +565,7 @@ class SettingsOverlay(ctk.CTkFrame):
     Overlay to enter, test, and save the TMDB API key.
     """
     def __init__(self, parent, tmdb_client, on_close_callback):
-        super().__init__(parent, fg_color="rgba(11, 11, 15, 0.95)")
+        super().__init__(parent, fg_color="BG_COLOR")
         self.tmdb_client = tmdb_client
         self.on_close_callback = on_close_callback
         
@@ -605,7 +605,7 @@ class SettingsOverlay(ctk.CTkFrame):
         self.theme_option = ctk.CTkOptionMenu(self.theme_frame, values=["Cyan", "Rot", "Blau", "Lila", "Schwarz"],
                                               fg_color="#1E1E26", button_color=ACCENT_COLOR, button_hover_color=ACCENT_HOVER,
                                               dropdown_fg_color="#1E1E26", dropdown_text_color=TEXT_PRIMARY,
-                                              dropdown_hover_color="rgba(255, 255, 255, 0.05)", text_color=TEXT_PRIMARY)
+                                              dropdown_hover_color="#2A2A35", text_color=TEXT_PRIMARY)
         self.theme_option.pack(side="left", fill="x", expand=True)
         
         # Prepopulate theme dropdown
@@ -624,7 +624,7 @@ class SettingsOverlay(ctk.CTkFrame):
         
         self.btn_test = ctk.CTkButton(self.btn_row, text="Testen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
                                       fg_color="transparent", text_color=TEXT_PRIMARY, border_color=ACCENT_COLOR, border_width=1,
-                                      hover_color="rgba(0, 240, 255, 0.1)", command=self._test_key)
+                                      hover_color="#0A252E", command=self._test_key)
         self.btn_test.pack(side="left", padx=10)
         
         self.btn_save = ctk.CTkButton(self.btn_row, text="Speichern & Schließen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
@@ -632,7 +632,7 @@ class SettingsOverlay(ctk.CTkFrame):
         self.btn_save.pack(side="left", padx=10)
         
         self.btn_cancel = ctk.CTkButton(self.btn_row, text="Abbrechen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-                                        fg_color="transparent", text_color=TEXT_SECONDARY, hover_color="rgba(255, 255, 255, 0.05)", command=self.on_close_callback)
+                                        fg_color="transparent", text_color=TEXT_SECONDARY, hover_color="#2A2A35", command=self.on_close_callback)
         self.btn_cancel.pack(side="left", padx=10)
         
     def update_status_label(self):
@@ -694,7 +694,7 @@ class AddMovieOverlay(ctk.CTkFrame):
     2. Manual creation from scratch with local asset copy options
     """
     def __init__(self, parent, tmdb_client, on_add_callback, on_close_callback):
-        super().__init__(parent, fg_color="rgba(11, 11, 15, 0.95)")
+        super().__init__(parent, fg_color="BG_COLOR")
         self.tmdb_client = tmdb_client
         self.on_add_callback = on_add_callback # callback: function(movie_data)
         self.on_close_callback = on_close_callback
@@ -705,7 +705,7 @@ class AddMovieOverlay(ctk.CTkFrame):
         
         # Close Button top right
         self.btn_close = ctk.CTkButton(self.container, text="✕", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
-                                       fg_color="transparent", text_color=TEXT_SECONDARY, hover_color="rgba(255,255,255,0.05)",
+                                       fg_color="transparent", text_color=TEXT_SECONDARY, hover_color="#2E2E3A",
                                        width=30, height=30, command=self.on_close_callback)
         self.btn_close.pack(side="top", anchor="ne", padx=10, pady=10)
         
@@ -715,7 +715,7 @@ class AddMovieOverlay(ctk.CTkFrame):
         # Tabs
         self.tab_view = ctk.CTkTabview(self.container, fg_color="transparent", text_color=TEXT_PRIMARY, segmented_button_fg_color="#1E1E26",
                                        segmented_button_selected_color=ACCENT_COLOR, segmented_button_selected_hover_color=ACCENT_HOVER,
-                                       segmented_button_unselected_color="#1E1E26", segmented_button_unselected_hover_color="rgba(255,255,255,0.05)")
+                                       segmented_button_unselected_color="#1E1E26", segmented_button_unselected_hover_color="#2E2E3A")
         self.tab_view.pack(fill="both", expand=True, padx=20, pady=10)
         
         self.tab_search = self.tab_view.add("Online TMDB Suche")
@@ -941,7 +941,7 @@ class AddMovieOverlay(ctk.CTkFrame):
         poster_label.pack(side="left", padx=(0, 10))
         
         # Facts box
-        facts_frame = ctk.CTkFrame(info_row, fg_color="rgba(255,255,255,0.02)", border_width=1, border_color="rgba(255,255,255,0.05)", corner_radius=8)
+        facts_frame = ctk.CTkFrame(info_row, fg_color="#181822", border_width=1, border_color="#2E2E3A", corner_radius=8)
         facts_frame.pack(side="left", fill="both", expand=True, padx=5, pady=5)
         
         def add_fact(label, val):
@@ -1074,7 +1074,7 @@ class AddMovieOverlay(ctk.CTkFrame):
                 # File picker button
                 btn_browse = ctk.CTkButton(file_frame, text="Suchen...", font=ctk.CTkFont(family="Segoe UI", size=11),
                                            fg_color="transparent", text_color=TEXT_PRIMARY, border_color=CARD_BORDER, border_width=1,
-                                           hover_color="rgba(255,255,255,0.05)", width=80, command=lambda e=entry_path: self._select_local_file(e))
+                                           hover_color="#2E2E3A", width=80, command=lambda e=entry_path: self._select_local_file(e))
                 btn_browse.pack(side="right")
                 self.inputs[key] = entry_path
 
@@ -1182,7 +1182,7 @@ class EditMovieOverlay(ctk.CTkFrame):
     Pre-populates fields with database records.
     """
     def __init__(self, parent, movie: dict, on_save_callback, on_close_callback):
-        super().__init__(parent, fg_color="rgba(11, 11, 15, 0.95)")
+        super().__init__(parent, fg_color="BG_COLOR")
         self.movie = movie
         self.on_save_callback = on_save_callback
         self.on_close_callback = on_close_callback
@@ -1192,7 +1192,7 @@ class EditMovieOverlay(ctk.CTkFrame):
         
         # Close Button top right
         self.btn_close = ctk.CTkButton(self.container, text="✕", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
-                                       fg_color="transparent", text_color=TEXT_SECONDARY, hover_color="rgba(255,255,255,0.05)",
+                                       fg_color="transparent", text_color=TEXT_SECONDARY, hover_color="#2E2E3A",
                                        width=30, height=30, command=self.on_close_callback)
         self.btn_close.place(x=self.container.winfo_width() - 40, y=10)
         self.btn_close.pack(side="top", anchor="ne", padx=10, pady=10)
@@ -1262,7 +1262,7 @@ class EditMovieOverlay(ctk.CTkFrame):
                 
                 btn_browse = ctk.CTkButton(file_frame, text="Suchen...", font=ctk.CTkFont(family="Segoe UI", size=11),
                                            fg_color="transparent", text_color=TEXT_PRIMARY, border_color=CARD_BORDER, border_width=1,
-                                           hover_color="rgba(255,255,255,0.05)", width=80, command=lambda e=entry_path: self._select_local_file(e))
+                                           hover_color="#2E2E3A", width=80, command=lambda e=entry_path: self._select_local_file(e))
                 btn_browse.pack(side="right")
                 self.inputs[key] = entry_path
 
@@ -1454,7 +1454,7 @@ class CinePalastApp(ctk.CTk):
         
         self.btn_settings = ctk.CTkButton(self.btn_frame, text="Einstellungen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
                                           fg_color="transparent", text_color=TEXT_PRIMARY, border_color=CARD_BORDER, border_width=1,
-                                          hover_color="rgba(255, 255, 255, 0.05)", command=self._show_settings_overlay)
+                                          hover_color="#2A2A35", command=self._show_settings_overlay)
         self.btn_settings.pack(side="left")
         
         # 3. Real-time Search (Center - packed last with expand=True)

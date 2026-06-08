@@ -9,7 +9,7 @@ if getattr(sys, 'frozen', False):
 else:
     app_dir = os.path.dirname(os.path.abspath(__file__))
 
-DATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "CinePalastManager")
+DATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "CinePalast Manager")
 os.makedirs(os.path.join(DATA_DIR, "assets"), exist_ok=True)
 
 # Copy DTB.png and FSK assets from read-only installation directory to AppData

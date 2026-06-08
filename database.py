@@ -1,190 +1,228 @@
 import os
 import sqlite3
 
+DB_FILE = "cinepalast.db"
+
+def initialize_db(db_file=DB_FILE):
+    """Initializes the SQLite database and creates the 'media' table with all required fields."""
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
+    
+    # Create the media table with exactly the fields requested by the user
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS media (
+        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        Name TEXT NOT NULL,
+        Jahr INTEGER,
+        Schauspieler TEXT,
+        Genre TEXT,
+        Laufzeit_min INTEGER,
+        Beschreibung TEXT,
+        FSK TEXT,
+        Produktionsfirma TEXT,
+        Regisseur TEXT,
+        Filmreihe TEXT,
+        Produktionsland TEXT,
+        Deutsche_Synchronsprecher TEXT,
+        Poster_Pfad TEXT,
+        Banner_Pfad TEXT
+    );
+    """)
+    conn.commit()
+    conn.close()
+
+def add_movie(data_dict: dict, db_file=DB_FILE) -> int:
+    """
+    Inserts a movie into the 'media' table.
+    Expects a dictionary containing fields matching the table columns.
+    Returns the ID of the newly inserted movie.
+    """
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
+    
+    query = """
+    INSERT INTO media (
+        Name, Jahr, Schauspieler, Genre, Laufzeit_min, Beschreibung, FSK,
+        Produktionsfirma, Regisseur, Filmreihe, Produktionsland,
+        Deutsche_Synchronsprecher, Poster_Pfad, Banner_Pfad
+    ) VALUES (
+        :Name, :Jahr, :Schauspieler, :Genre, :Laufzeit_min, :Beschreibung, :FSK,
+        :Produktionsfirma, :Regisseur, :Filmreihe, :Produktionsland,
+        :Deutsche_Synchronsprecher, :Poster_Pfad, :Banner_Pfad
+    );
+    """
+    try:
+        cursor.execute(query, data_dict)
+        conn.commit()
+        last_id = cursor.lastrowid
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+    return last_id
+
+def search_movies_realtime(search_query: str, db_file=DB_FILE) -> list:
+    """
+    Searches the database in real-time for movies matching the search string.
+    Checks Name, Schauspieler, Genre, Regisseur, and Filmreihe.
+    Returns a list of dictionaries representing the matching movies.
+    """
+    if not search_query.strip():
+        return get_all_movies(db_file)
+        
+    conn = sqlite3.connect(db_file)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    sql = """
+    SELECT * FROM media
+    WHERE Name LIKE ?
+       OR Schauspieler LIKE ?
+       OR Genre LIKE ?
+       OR Regisseur LIKE ?
+       OR Filmreihe LIKE ?
+    ORDER BY Name ASC;
+    """
+    like_query = f"%{search_query}%"
+    params = (like_query, like_query, like_query, like_query, like_query)
+    
+    cursor.execute(sql, params)
+    rows = cursor.fetchall()
+    results = [dict(row) for row in rows]
+    conn.close()
+    return results
+
+def get_all_movies(db_file=DB_FILE) -> list:
+    """
+    Retrieves all movies from the 'media' table sorted alphabetically by Name.
+    Returns a list of dictionaries representing each movie.
+    """
+    conn = sqlite3.connect(db_file)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM media ORDER BY Name ASC;")
+    rows = cursor.fetchall()
+    results = [dict(row) for row in rows]
+    conn.close()
+    return results
+
+def get_movie_by_id(movie_id: int, db_file=DB_FILE) -> dict:
+    """
+    Retrieves a single movie by its ID from the 'media' table.
+    Returns a dictionary or None if not found.
+    """
+    conn = sqlite3.connect(db_file)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM media WHERE ID = ?;", (movie_id,))
+    row = cursor.fetchone()
+    result = dict(row) if row else None
+    conn.close()
+    return result
+
+def delete_movie_by_id(movie_id: int, db_file=DB_FILE):
+    """Deletes a movie record from the database by ID."""
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM media WHERE ID = ?;", (movie_id,))
+    conn.commit()
+    conn.close()
+
+def update_movie_by_id(movie_id: int, data_dict: dict, db_file=DB_FILE):
+    """Updates an existing movie record in the database by ID."""
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
+    
+    # Exclude ID from keys to update
+    data = {k: v for k, v in data_dict.items() if k.upper() != "ID"}
+    set_clause = ", ".join([f"{key} = :{key}" for key in data.keys()])
+    
+    query = f"UPDATE media SET {set_clause} WHERE ID = :movie_id;"
+    data["movie_id"] = movie_id
+    
+    try:
+        cursor.execute(query, data)
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
 class DatabaseManager:
     """
-    Manages the local SQLite database for storing movie metadata.
-    Handles table initialization, inserts, updates, deletions, and real-time searching.
+    Class implementation of database coordinator used by ui.py and main.py.
+    Provides schema translation between UI dictionary keys and DB column names.
     """
-    def __init__(self, db_path="cinepalast.db"):
+    def __init__(self, db_path=DB_FILE):
         self.db_path = db_path
-        self._ensure_asset_directories()
-        self.init_db()
+        initialize_db(self.db_path)
 
-    def _ensure_asset_directories(self):
-        """Creates assets directories if they do not exist."""
-        os.makedirs("assets/posters", exist_ok=True)
-        os.makedirs("assets/banners", exist_ok=True)
-        # Create .gitkeep files to allow keeping folders in git if needed
-        for folder in ["assets/posters", "assets/banners"]:
-            gitkeep_path = os.path.join(folder, ".gitkeep")
-            if not os.path.exists(gitkeep_path):
-                with open(gitkeep_path, "w") as f:
-                    pass
+    def _ui_to_db(self, movie_dict: dict) -> dict:
+        """Translates UI representation to SQLite column names."""
+        return {
+            "Name": movie_dict.get("titel", ""),
+            "Jahr": movie_dict.get("jahr"),
+            "Schauspieler": movie_dict.get("schauspieler_cast", ""),
+            "Genre": movie_dict.get("genre_richtung", ""),
+            "Laufzeit_min": movie_dict.get("laufzeit_min", 0),
+            "Beschreibung": movie_dict.get("handlung_beschreibung", ""),
+            "FSK": movie_dict.get("fsk", "k.A."),
+            "Produktionsfirma": movie_dict.get("produktionsfirma_studio", ""),
+            "Regisseur": movie_dict.get("regisseur", ""),
+            "Filmreihe": movie_dict.get("filmreihe", ""),
+            "Produktionsland": movie_dict.get("produktionsland", ""),
+            "Deutsche_Synchronsprecher": movie_dict.get("deutsche_synchronsprecher", ""),
+            "Poster_Pfad": movie_dict.get("poster_pfad", ""),
+            "Banner_Pfad": movie_dict.get("banner_pfad", "")
+        }
 
-    def _get_connection(self):
-        """Returns a sqlite3 connection with row factory enabled for dictionary-like access."""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def _db_to_ui(self, db_row: dict) -> dict:
+        """Translates SQLite columns to UI representation."""
+        if not db_row:
+            return {}
+        return {
+            "id": db_row.get("ID"),
+            "titel": db_row.get("Name"),
+            "jahr": db_row.get("Jahr"),
+            "schauspieler_cast": db_row.get("Schauspieler"),
+            "genre_richtung": db_row.get("Genre"),
+            "laufzeit_min": db_row.get("Laufzeit_min"),
+            "handlung_beschreibung": db_row.get("Beschreibung"),
+            "fsk": db_row.get("FSK"),
+            "produktionsfirma_studio": db_row.get("Produktionsfirma"),
+            "regisseur": db_row.get("Regisseur"),
+            "filmreihe": db_row.get("Filmreihe"),
+            "produktionsland": db_row.get("Produktionsland"),
+            "deutsche_synchronsprecher": db_row.get("Deutsche_Synchronsprecher"),
+            "poster_pfad": db_row.get("Poster_Pfad"),
+            "banner_pfad": db_row.get("Banner_Pfad")
+        }
 
-    def init_db(self):
-        """Initializes the database schema if it doesn't already exist."""
-        query = """
-        CREATE TABLE IF NOT EXISTS filme (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            titel TEXT NOT NULL,
-            jahr INTEGER,
-            schauspieler_cast TEXT,
-            genre_richtung TEXT,
-            laufzeit_min INTEGER,
-            handlung_beschreibung TEXT,
-            fsk TEXT,
-            produktionsfirma_studio TEXT,
-            regisseur TEXT,
-            filmreihe TEXT,
-            produktionsland TEXT,
-            deutsche_synchronsprecher TEXT,
-            poster_pfad TEXT,
-            banner_pfad TEXT
-        );
-        """
-        with self._get_connection() as conn:
-            conn.execute(query)
-            conn.commit()
+    def add_movie(self, movie_dict: dict) -> int:
+        db_data = self._ui_to_db(movie_dict)
+        return add_movie(db_data, self.db_path)
 
-    def add_movie(self, movie_data: dict) -> int:
-        """
-        Inserts a new movie record into the database.
-        
-        :param movie_data: A dictionary containing movie metadata matching the columns.
-        :return: The ID of the inserted record.
-        """
-        # Ensure title has (Year) suffix if year is specified and suffix is not already in the title
-        titel = movie_data.get("titel", "Unbekannt")
-        jahr = movie_data.get("jahr")
-        if jahr:
-            year_suffix = f"({jahr})"
-            if year_suffix not in titel:
-                movie_data["titel"] = f"{titel} {year_suffix}"
-
-        query = """
-        INSERT INTO filme (
-            titel, jahr, schauspieler_cast, genre_richtung, laufzeit_min,
-            handlung_beschreibung, fsk, produktionsfirma_studio, regisseur,
-            filmreihe, produktionsland, deutsche_synchronsprecher, poster_pfad, banner_pfad
-        ) VALUES (
-            :titel, :jahr, :schauspieler_cast, :genre_richtung, :laufzeit_min,
-            :handlung_beschreibung, :fsk, :produktionsfirma_studio, :regisseur,
-            :filmreihe, :produktionsland, :deutsche_synchronsprecher, :poster_pfad, :banner_pfad
-        );
-        """
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(query, movie_data)
-            conn.commit()
-            return cursor.lastrowid
-
-    def update_movie(self, movie_id: int, movie_data: dict):
-        """
-        Updates an existing movie record in the database.
-        
-        :param movie_id: The ID of the movie to update.
-        :param movie_data: A dictionary containing fields to be updated.
-        """
-        # Ensure title has (Year) suffix
-        titel = movie_data.get("titel")
-        jahr = movie_data.get("jahr")
-        if titel and jahr:
-            year_suffix = f"({jahr})"
-            if year_suffix not in titel:
-                movie_data["titel"] = f"{titel} {year_suffix}"
-
-        # Exclude 'id' if present in dictionary keys to avoid SQL constraints
-        data = {k: v for k, v in movie_data.items() if k != "id"}
-        set_clause = ", ".join([f"{key} = :{key}" for key in data.keys()])
-        
-        query = f"UPDATE filme SET {set_clause} WHERE id = :movie_id;"
-        data["movie_id"] = movie_id
-
-        with self._get_connection() as conn:
-            conn.execute(query, data)
-            conn.commit()
-
-    def delete_movie(self, movie_id: int):
-        """
-        Deletes a movie record from the database.
-        
-        :param movie_id: The ID of the movie to delete.
-        """
-        with self._get_connection() as conn:
-            # We fetch poster and banner paths first to clean up files if desired
-            movie = self.get_movie(movie_id)
-            if movie:
-                # Clean up local asset files if they exist
-                for key in ["poster_pfad", "banner_pfad"]:
-                    path = movie[key]
-                    if path and os.path.exists(path) and not path.endswith(".gitkeep"):
-                        try:
-                            # Let's verify we only delete within our assets directory for safety
-                            if path.startswith("assets/"):
-                                os.remove(path)
-                        except Exception as e:
-                            print(f"Error removing asset {path}: {e}")
-
-            conn.execute("DELETE FROM filme WHERE id = ?;", (movie_id,))
-            conn.commit()
-
-    def get_movie(self, movie_id: int) -> dict:
-        """
-        Retrieves a single movie by its ID.
-        
-        :param movie_id: The ID of the movie.
-        :return: A dictionary representing the movie record or None.
-        """
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM filme WHERE id = ?;", (movie_id,))
-            row = cursor.fetchone()
-            return dict(row) if row else None
+    def search_movies(self, query: str) -> list:
+        results = search_movies_realtime(query, self.db_path)
+        return [self._db_to_ui(row) for row in results]
 
     def get_all_movies(self) -> list:
-        """
-        Retrieves all movies sorted by title.
-        
-        :return: A list of dictionaries representing movie records.
-        """
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM filme ORDER BY titel ASC;")
-            rows = cursor.fetchall()
-            return [dict(row) for row in rows]
+        results = get_all_movies(self.db_path)
+        return [self._db_to_ui(row) for row in results]
 
-    def search_movies(self, query_text: str) -> list:
-        """
-        Queries the database for movies matching the search string in title, cast, genre, director, or collection.
-        Uses SQLite LIKE operator.
-        
-        :param query_text: Search query string.
-        :return: A list of dictionaries representing matching movie records.
-        """
-        if not query_text.strip():
-            return self.get_all_movies()
-            
-        sql = """
-        SELECT * FROM filme 
-        WHERE titel LIKE ? 
-           OR schauspieler_cast LIKE ? 
-           OR genre_richtung LIKE ? 
-           OR regisseur LIKE ?
-           OR filmreihe LIKE ?
-        ORDER BY titel ASC;
-        """
-        like_query = f"%{query_text}%"
-        params = (like_query, like_query, like_query, like_query, like_query)
-        
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, params)
-            rows = cursor.fetchall()
-            return [dict(row) for row in rows]
+    def get_movie(self, movie_id: int) -> dict:
+        row = get_movie_by_id(movie_id, self.db_path)
+        if row:
+            return self._db_to_ui(row)
+        return {}
+
+    def update_movie(self, movie_id: int, movie_dict: dict):
+        db_data = self._ui_to_db(movie_dict)
+        update_movie_by_id(movie_id, db_data, self.db_path)
+
+    def delete_movie(self, movie_id: int):
+        delete_movie_by_id(movie_id, self.db_path)
