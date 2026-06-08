@@ -639,7 +639,7 @@ class SettingsOverlay(ctk.CTkFrame):
         
         # Theme Choice Row
         self.theme_frame = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.theme_frame.pack(fill="x", padx=40, pady=8)
+        self.theme_frame.pack(fill="x", padx=40, pady=6)
         
         self.lbl_theme = ctk.CTkLabel(self.theme_frame, text="Design-Farbe:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY, width=100, anchor="w")
         self.lbl_theme.pack(side="left", padx=(0, 10))
@@ -654,9 +654,26 @@ class SettingsOverlay(ctk.CTkFrame):
         current_theme_display = theme_map.get(_theme, "Cyan")
         self.theme_option.set(current_theme_display)
         
+        # Start-Ansicht Row
+        self.view_frame = ctk.CTkFrame(self.container, fg_color="transparent")
+        self.view_frame.pack(fill="x", padx=40, pady=6)
+        
+        self.lbl_view = ctk.CTkLabel(self.view_frame, text="Start-Ansicht:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY, width=100, anchor="w")
+        self.lbl_view.pack(side="left", padx=(0, 10))
+        
+        self.view_option = ctk.CTkOptionMenu(self.view_frame, values=["Galerie", "Tabelle"],
+                                             fg_color="#1E1E26", button_color=ACCENT_COLOR, button_hover_color=ACCENT_HOVER,
+                                             dropdown_fg_color="#1E1E26", dropdown_text_color=TEXT_PRIMARY,
+                                             dropdown_hover_color="#2A2A35", text_color=TEXT_PRIMARY)
+        self.view_option.pack(side="left", fill="x", expand=True)
+        
+        from api import load_config
+        current_view = load_config().get("default_view", "Galerie")
+        self.view_option.set(current_view)
+        
         # Database Options Row
         self.db_frame = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.db_frame.pack(fill="x", padx=40, pady=8)
+        self.db_frame.pack(fill="x", padx=40, pady=6)
         
         self.lbl_db_opt = ctk.CTkLabel(self.db_frame, text="Datenbank:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY, width=100, anchor="w")
         self.lbl_db_opt.pack(side="left", padx=(0, 10))
@@ -665,13 +682,30 @@ class SettingsOverlay(ctk.CTkFrame):
                                           fg_color="#ef4444", text_color="#FFFFFF", hover_color="#dc2626", height=28, command=self._reset_database_clicked)
         self.btn_reset_db.pack(side="left", fill="x", expand=True)
         
+        # Database Backup & Restore Row
+        self.db_action_frame = ctk.CTkFrame(self.container, fg_color="transparent")
+        self.db_action_frame.pack(fill="x", padx=40, pady=6)
+        
+        self.lbl_db_act = ctk.CTkLabel(self.db_action_frame, text="DB Aktionen:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY, width=100, anchor="w")
+        self.lbl_db_act.pack(side="left", padx=(0, 10))
+        
+        self.btn_backup_db = ctk.CTkButton(self.db_action_frame, text="Backup erstellen", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                                           fg_color="transparent", text_color=TEXT_PRIMARY, border_color=ACCENT_COLOR, border_width=1,
+                                           hover_color="#0A252E", height=28, command=self._backup_database_clicked)
+        self.btn_backup_db.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        
+        self.btn_restore_db = ctk.CTkButton(self.db_action_frame, text="Backup laden", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                                            fg_color="transparent", text_color=TEXT_PRIMARY, border_color=ACCENT_COLOR, border_width=1,
+                                            hover_color="#0A252E", height=28, command=self._restore_database_clicked)
+        self.btn_restore_db.pack(side="left", fill="x", expand=True, padx=(5, 0))
+        
         # Status Label
         self.lbl_status = ctk.CTkLabel(self.container, text="Status: Nicht getestet", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color=TEXT_SECONDARY)
         self.lbl_status.pack(pady=5)
         
         # Actions Row
         self.btn_row = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.btn_row.pack(pady=15)
+        self.btn_row.pack(pady=10)
         
         self.btn_test = ctk.CTkButton(self.btn_row, text="Testen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
                                       fg_color="transparent", text_color=TEXT_PRIMARY, border_color=ACCENT_COLOR, border_width=1,
@@ -754,15 +788,17 @@ class SettingsOverlay(ctk.CTkFrame):
         save_api_key(new_key)
         save_github_token(new_github)
         
-        # Save theme configuration
+        # Save theme and default view configuration
         theme_display_map = {"Cyan": "cyan", "Rot": "red", "Blau": "blue", "Lila": "purple", "Schwarz": "black"}
         selected_theme = theme_display_map.get(self.theme_option.get(), "cyan")
+        selected_view = self.view_option.get()
         
         cfg = load_config()
         cfg["theme"] = selected_theme
+        cfg["default_view"] = selected_view
         save_config(cfg)
         
-        messagebox.showinfo("Gespeichert", "Einstellungen wurden erfolgreich gespeichert.\n\nBitte starten Sie die App neu, um das neue Design anzuwenden.")
+        messagebox.showinfo("Gespeichert", "Einstellungen wurden erfolgreich gespeichert.\n\nBitte starten Sie die App neu, um alle Änderungen anzuwenden.")
         self.on_close_callback()
  
     def _reset_database_clicked(self):
@@ -779,6 +815,36 @@ class SettingsOverlay(ctk.CTkFrame):
                 messagebox.showinfo("Erfolgreich", "Die lokale Datenbank wurde erfolgreich geleert. Sie ist jetzt komplett leer und bereit für Ihre eigenen Filme!")
             except Exception as e:
                 messagebox.showerror("Fehler", f"Fehler beim Leeren der Datenbank: {str(e)}")
+
+    def _backup_database_clicked(self):
+        import shutil
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".db",
+            filetypes=[("SQLite Datenbank", "*.db"), ("Alle Dateien", "*.*")],
+            title="Datenbank-Backup speichern",
+            initialfile="cinepalast_backup.db"
+        )
+        if file_path:
+            try:
+                shutil.copy2(self.parent.db_manager.db_path, file_path)
+                messagebox.showinfo("Backup erfolgreich", f"Die Datenbank wurde erfolgreich gesichert unter:\n\n{file_path}")
+            except Exception as e:
+                messagebox.showerror("Fehler", f"Fehler beim Erstellen des Backups:\n{str(e)}")
+
+    def _restore_database_clicked(self):
+        import shutil
+        if messagebox.askyesno("Datenbank wiederherstellen", "Möchten Sie wirklich ein Backup einspielen?\n\nDie aktuelle Filmdatenbank wird dabei überschrieben."):
+            file_path = filedialog.askopenfilename(
+                filetypes=[("SQLite Datenbank", "*.db"), ("Alle Dateien", "*.*")],
+                title="Datenbank-Backup laden"
+            )
+            if file_path:
+                try:
+                    shutil.copy2(file_path, self.parent.db_manager.db_path)
+                    self.parent.refresh_gallery()
+                    messagebox.showinfo("Erfolgreich", "Die Datenbank wurde erfolgreich wiederhergestellt!")
+                except Exception as e:
+                    messagebox.showerror("Fehler", f"Fehler beim Wiederherstellen der Datenbank:\n{str(e)}")
 
 
 
@@ -1487,14 +1553,14 @@ class CinePalastApp(ctk.CTk):
         self.last_width = 0
         self.movies_list = [] # Cached list of current movies displayed
         self.online_movies_list = [] # Online recommendations from TMDB
-        self.view_mode = "Galerie" # Default view mode
+        from api import load_config
+        self.view_mode = load_config().get("default_view", "Galerie") # Default view mode loaded from settings
         
         # 2. Setup Top Panel Layout
         self._setup_top_panel()
         
         # 3. Setup Scrollable Media Grid Layout
         self.gallery_scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self.gallery_scroll.pack(fill="both", expand=True, padx=20, pady=(10, 20))
         
         # Bind resize configuration to enable responsive reflow columns
         self.gallery_scroll.bind("<Configure>", self._on_gallery_resize)
@@ -1503,8 +1569,10 @@ class CinePalastApp(ctk.CTk):
         self.active_overlay = None
         
         # 4. First load
-        self.refresh_gallery()
+        self._on_view_changed(self.view_mode)
         self.after(1000, self.check_for_updates_background)
+        self.bind("<Button-1>", self._on_window_click)
+
 
         
     def _load_app_icon(self):
@@ -1561,7 +1629,7 @@ class CinePalastApp(ctk.CTk):
                                                   unselected_color="#1E1E26",
                                                   text_color=TEXT_PRIMARY)
         self.view_switch.pack(side="left", padx=(0, 10))
-        self.view_switch.set("Galerie")
+        self.view_switch.set(self.view_mode)
         
         self.btn_add = ctk.CTkButton(self.btn_frame, text="+ Film hinzufügen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
                                      fg_color=ACCENT_COLOR, text_color="#000000", hover_color=ACCENT_HOVER, command=self._show_add_overlay)
@@ -1680,16 +1748,27 @@ class CinePalastApp(ctk.CTk):
         """Instantly queries SQLite database, and schedules online TMDB search."""
         self.refresh_gallery()
         
+        query = self.entry_main_search.get().strip()
+        if not query:
+            self._hide_suggestions()
+            self.online_movies_list = []
+            self._regrid_movies()
+            return
+            
+        # Query local database for matches and display floating suggestions
+        local_matches = self.db_manager.search_movies(query)
+        self._show_suggestions(local_matches)
+        
         # Debounce TMDB online search
         if hasattr(self, "_main_search_timer") and self._main_search_timer:
             self.after_cancel(self._main_search_timer)
             
-        query = self.entry_main_search.get().strip()
         if len(query) >= 2 and self.tmdb_client.get_api_key():
             self._main_search_timer = self.after(500, lambda: self._perform_main_online_search(query))
         else:
             self.online_movies_list = []
             self._regrid_movies()
+
 
     def _perform_main_online_search(self, query):
         def thread_func():
@@ -1990,4 +2069,118 @@ class CinePalastApp(ctk.CTk):
         if hasattr(self, 'update_overlay') and self.update_overlay.winfo_exists():
             self.update_overlay.destroy()
         messagebox.showerror("Update-Fehler", f"Fehler beim Herunterladen des Updates:\n{str(error)}")
+
+    def _show_suggestions(self, matches):
+        """Displays a floating suggestions list overlay directly below the search bar."""
+        if not matches:
+            self._hide_suggestions()
+            return
+            
+        # Limit to top 5 results
+        matches = matches[:5]
+        
+        # Get coordinates of the entry_main_search relative to the main window
+        entry = self.entry_main_search
+        x = entry.winfo_x()
+        y = entry.winfo_y()
+        w = entry.winfo_width()
+        h = entry.winfo_height()
+        
+        # Walk up the widget parent tree to find the position relative to self
+        parent = entry.master
+        while parent and parent != self:
+            x += parent.winfo_x()
+            y += parent.winfo_y()
+            parent = parent.master
+            
+        if not hasattr(self, "suggestions_frame") or not self.suggestions_frame or not self.suggestions_frame.winfo_exists():
+            self.suggestions_frame = ctk.CTkFrame(self, fg_color=PANEL_COLOR, border_width=2, border_color=ACCENT_COLOR, corner_radius=10)
+            
+        # Position Suggestions Frame exactly under the search bar dynamically
+        if w < 10:
+            self.suggestions_frame.place(relx=0.25, y=70, relwidth=0.5, height=len(matches) * 55 + 10)
+        else:
+            self.suggestions_frame.place(x=x, y=y + h + 5, width=w, height=len(matches) * 55 + 10)
+            
+        self.suggestions_frame.lift() # Bring to front
+        
+        # Clear old suggestion rows
+        for widget in self.suggestions_frame.winfo_children():
+            widget.destroy()
+            
+        for m in matches:
+            row = ctk.CTkFrame(self.suggestions_frame, fg_color="transparent", height=50, corner_radius=6)
+            row.pack(fill="x", padx=5, pady=2)
+            row.pack_propagate(False)
+            
+            movie_id = m["id"]
+            def make_click_handler(mid):
+                return lambda e: (self._show_movie_details(mid), self._hide_suggestions())
+            handler = make_click_handler(movie_id)
+            
+            # Left: Poster Thumbnail
+            thumb_path = m.get("poster_pfad")
+            thumbnail = get_ctk_image(thumb_path, (30, 45), m.get("titel"), "poster")
+            lbl_thumb = ctk.CTkLabel(row, image=thumbnail, text="")
+            lbl_thumb.pack(side="left", padx=10, pady=2)
+            
+            # Center: Title
+            title_text = m.get("titel", "Unbekannt")
+            year_val = m.get("jahr")
+            if year_val and f"({year_val})" not in title_text:
+                title_text = f"{title_text} ({year_val})"
+            
+            lbl_title = ctk.CTkLabel(row, text=title_text, font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY, anchor="w")
+            lbl_title.pack(side="left", fill="both", expand=True, padx=5)
+            
+            # Right: FSK Badge
+            fsk_val = m.get("fsk", "k.A.")
+            fsk_img = get_fsk_image(fsk_val, size=(22, 22))
+            if fsk_img:
+                fsk_badge = ctk.CTkLabel(row, image=fsk_img, text="")
+            else:
+                fsk_bg, fsk_fg, fsk_lbl = get_fsk_colors(fsk_val)
+                fsk_badge = ctk.CTkLabel(row, text=fsk_lbl, font=ctk.CTkFont(family="Segoe UI", size=9, weight="bold"),
+                                              fg_color=fsk_bg, text_color=fsk_fg, corner_radius=4, width=42, height=18)
+            fsk_badge.pack(side="right", padx=15, pady=15)
+            
+            # Hover animations
+            def on_enter(e, r=row):
+                r.configure(fg_color="#1E1E26")
+            def on_leave(e, r=row):
+                r.configure(fg_color="transparent")
+                
+            row.bind("<Enter>", on_enter)
+            row.bind("<Leave>", on_leave)
+            
+            for widget in [row, lbl_thumb, lbl_title, fsk_badge]:
+                widget.bind("<Button-1>", handler)
+                widget.bind("<Enter>", on_enter)
+                widget.bind("<Leave>", on_leave)
+
+    def _hide_suggestions(self):
+        """Hides the floating suggestions list overlay."""
+        if hasattr(self, "suggestions_frame") and self.suggestions_frame and self.suggestions_frame.winfo_exists():
+            self.suggestions_frame.place_forget()
+
+    def _on_window_click(self, event):
+        """Dismiss suggestions frame if clicking outside of it."""
+        if hasattr(self, "suggestions_frame") and self.suggestions_frame and self.suggestions_frame.winfo_exists():
+            try:
+                # Get the widget that was clicked
+                widget = self.winfo_containing(event.x_root, event.y_root)
+                # If widget is not suggestions_frame and suggestions_frame is not a parent of it, hide suggestions
+                if widget != self.entry_main_search:
+                    is_inside = False
+                    parent = widget
+                    while parent:
+                        if parent == self.suggestions_frame:
+                            is_inside = True
+                            break
+                        parent = parent.master
+                    if not is_inside:
+                        self._hide_suggestions()
+            except Exception:
+                pass
+
 
