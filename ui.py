@@ -208,7 +208,7 @@ def create_placeholder_image(size: tuple, title: str, img_type: str) -> Image.Im
         draw.text((width // 2, height // 2), title, fill=ACCENT_COLOR, anchor="mm", font=font)
         return img
 
-def get_ctk_image(path: str, size: tuple, title: str, img_type: str) -> ctk.CTkImage:
+def get_ctk_image(path: Optional[str], size: tuple, title: str, img_type: str) -> ctk.CTkImage:
     """
     Loads an image from the disk or falls back to a generated placeholder.
     Wraps it in a CTkImage for high-DPI scaling.
