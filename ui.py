@@ -29,24 +29,34 @@ ACCENT_HOVER = "#00B3C2"        # Darker cyan
 TEXT_PRIMARY = "#FFFFFF"        # Pure white
 TEXT_SECONDARY = "#A0A0AA"      # Muted gray
 CARD_BORDER = "#1E1E26"         # Subtle card border
+GLOW_BG = "#041E26"             # Soft translucent glow background for buttons
+GLOW_HOVER = "#0A252E"          # Active glow hover color
 APP_VERSION = "1.0.0"
 
 
 if _theme == "red":
     ACCENT_COLOR = "#EF4444"
     ACCENT_HOVER = "#DC2626"
+    GLOW_BG = "#220808"
+    GLOW_HOVER = "#2E0A0A"
 elif _theme == "blue":
     ACCENT_COLOR = "#3B82F6"
     ACCENT_HOVER = "#2563EB"
+    GLOW_BG = "#081022"
+    GLOW_HOVER = "#0A182E"
 elif _theme == "purple":
     ACCENT_COLOR = "#A855F7"
     ACCENT_HOVER = "#9333EA"
+    GLOW_BG = "#150822"
+    GLOW_HOVER = "#1F0A2E"
 elif _theme == "black":
     BG_COLOR = "#050505"
     PANEL_COLOR = "#0D0D10"
     ACCENT_COLOR = "#E0E0E0"
     ACCENT_HOVER = "#A0A0A0"
     CARD_BORDER = "#1A1A22"
+    GLOW_BG = "#111111"
+    GLOW_HOVER = "#222222"
 
 class CTkToolTip:
     """
@@ -546,8 +556,8 @@ class DetailOverlay(ctk.CTkFrame):
         
         # 1. Back button (Semi-transparent floating button on the upper left)
         self.btn_back = ctk.CTkButton(self.content_card, text="← Zurück", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-                                      fg_color="#0F2D37", text_color=ACCENT_COLOR, border_color=ACCENT_COLOR, border_width=1,
-                                      hover_color="#1B4B59", width=100, height=32, command=self.on_close_callback)
+                                      fg_color=GLOW_BG, text_color=ACCENT_COLOR, border_color=ACCENT_COLOR, border_width=1,
+                                      hover_color=GLOW_HOVER, width=100, height=32, command=self.on_close_callback)
         self.btn_back.place(x=15, y=15)
         
         # 2. Movie Wallpaper/Banner
@@ -901,129 +911,149 @@ class UpdateDownloadOverlay(ctk.CTkFrame):
 class SettingsOverlay(ctk.CTkFrame):
     """
     Overlay to enter, test, and save the TMDB API key and GitHub Token.
+    Fully responsive stacked layout with dynamic visual accent theme mapping.
     """
     def __init__(self, parent, tmdb_client, on_close_callback):
-        super().__init__(parent, fg_color=BG_COLOR)
+        super().__init__(parent, fg_color="rgba(8, 8, 12, 0.96)")
         self.tmdb_client = tmdb_client
         self.on_close_callback = on_close_callback
         self.parent = parent
         
+        # Sleek glassmorphic settings card
         self.container = ctk.CTkFrame(self, fg_color=PANEL_COLOR, border_width=1, border_color=CARD_BORDER, corner_radius=16)
-        self.container.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.6, relheight=0.75)
+        self.container.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.54, relheight=0.82)
         
-        self.lbl_title = ctk.CTkLabel(self.container, text="CINEPALAST EINSTELLUNGEN", font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"), text_color=ACCENT_COLOR)
-        self.lbl_title.pack(pady=20)
+        self.lbl_title = ctk.CTkLabel(self.container, text="CINEPALAST EINSTELLUNGEN", 
+                                      font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"), text_color=ACCENT_COLOR)
+        self.lbl_title.pack(pady=(20, 2))
         
-        # Info Box
-        info_text = ("Geben Sie Ihren TMDB API-Schlüssel für Filminformationen und Ihren\n"
-                     "GitHub Personal Access Token für Live-Updates aus dem Repository ein.")
-        self.lbl_info = ctk.CTkLabel(self.container, text=info_text, font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_SECONDARY, justify="center")
+        self.lbl_info = ctk.CTkLabel(self.container, text="Verwalten Sie Ihre Verbindungsschlüssel, Design-Präferenzen und lokale Filmdatenbank.", 
+                                     font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_SECONDARY)
         self.lbl_info.pack(pady=(0, 15), padx=20)
         
-        # TMDB Key Input Row
+        # --- SECTION 1: VERBINDUNGEN & SCHLÜSSEL ---
+        self.lbl_sec_api = ctk.CTkLabel(self.container, text="API-VERBINDUNGEN & SCHLÜSSEL", 
+                                        font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), text_color=TEXT_SECONDARY)
+        self.lbl_sec_api.pack(anchor="w", padx=40, pady=(5, 3))
+        
+        # TMDB Key Input Stack
         self.input_frame = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.input_frame.pack(fill="x", padx=40, pady=8)
+        self.input_frame.pack(fill="x", padx=40, pady=4)
         
-        self.lbl_key = ctk.CTkLabel(self.input_frame, text="TMDB Key:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY, width=100, anchor="w")
-        self.lbl_key.pack(side="left", padx=(0, 10))
+        self.lbl_key = ctk.CTkLabel(self.input_frame, text="TMDB API-Key / Bearer Token", 
+                                    font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color=TEXT_PRIMARY)
+        self.lbl_key.pack(anchor="w", pady=(0, 2))
         
-        self.entry_key = ctk.CTkEntry(self.input_frame, fg_color="#1E1E26", border_color=CARD_BORDER, text_color=TEXT_PRIMARY, show="*")
-        self.entry_key.pack(side="left", fill="x", expand=True)
+        self.entry_key = ctk.CTkEntry(self.input_frame, fg_color="#121218", border_color=CARD_BORDER, text_color=TEXT_PRIMARY, show="*", height=32, corner_radius=8)
+        self.entry_key.pack(fill="x", expand=True)
         self.entry_key.insert(0, self.tmdb_client.get_api_key())
         
-        # GitHub Token Input Row
+        # GitHub Token Input Stack
         self.github_frame = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.github_frame.pack(fill="x", padx=40, pady=8)
+        self.github_frame.pack(fill="x", padx=40, pady=4)
         
-        self.lbl_github = ctk.CTkLabel(self.github_frame, text="GitHub Token:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY, width=100, anchor="w")
-        self.lbl_github.pack(side="left", padx=(0, 10))
+        self.lbl_github = ctk.CTkLabel(self.github_frame, text="GitHub Personal Access Token", 
+                                       font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color=TEXT_PRIMARY)
+        self.lbl_github.pack(anchor="w", pady=(0, 2))
         
-        self.entry_github = ctk.CTkEntry(self.github_frame, fg_color="#1E1E26", border_color=CARD_BORDER, text_color=TEXT_PRIMARY, show="*")
-        self.entry_github.pack(side="left", fill="x", expand=True)
+        self.entry_github = ctk.CTkEntry(self.github_frame, fg_color="#121218", border_color=CARD_BORDER, text_color=TEXT_PRIMARY, show="*", height=32, corner_radius=8)
+        self.entry_github.pack(fill="x", expand=True)
         from api import load_github_token
         self.entry_github.insert(0, load_github_token())
         
-        # Theme Choice Row
-        self.theme_frame = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.theme_frame.pack(fill="x", padx=40, pady=6)
+        # --- SECTION 2: ANWENDUNG & DESIGN ---
+        self.lbl_sec_design = ctk.CTkLabel(self.container, text="DESIGN & START-OPTIONEN", 
+                                           font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), text_color=TEXT_SECONDARY)
+        self.lbl_sec_design.pack(anchor="w", padx=40, pady=(10, 3))
         
-        self.lbl_theme = ctk.CTkLabel(self.theme_frame, text="Design-Farbe:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY, width=100, anchor="w")
-        self.lbl_theme.pack(side="left", padx=(0, 10))
+        # OptionMenus packed side-by-side
+        self.options_row = ctk.CTkFrame(self.container, fg_color="transparent")
+        self.options_row.pack(fill="x", padx=40, pady=4)
         
-        self.theme_option = ctk.CTkOptionMenu(self.theme_frame, values=["Cyan", "Rot", "Blau", "Lila", "Schwarz"],
-                                              fg_color="#1E1E26", button_color=ACCENT_COLOR, button_hover_color=ACCENT_HOVER,
-                                              dropdown_fg_color="#1E1E26", dropdown_text_color=TEXT_PRIMARY,
-                                              dropdown_hover_color="#2A2A35", text_color=TEXT_PRIMARY)
-        self.theme_option.pack(side="left", fill="x", expand=True)
+        # Theme dropdown column
+        self.theme_col = ctk.CTkFrame(self.options_row, fg_color="transparent")
+        self.theme_col.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        
+        self.lbl_theme = ctk.CTkLabel(self.theme_col, text="Design-Farbe", 
+                                      font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color=TEXT_PRIMARY)
+        self.lbl_theme.pack(anchor="w", pady=(0, 2))
+        
+        self.theme_option = ctk.CTkOptionMenu(self.theme_col, values=["Cyan", "Rot", "Blau", "Lila", "Schwarz"],
+                                              fg_color="#121218", button_color=ACCENT_COLOR, button_hover_color=ACCENT_HOVER,
+                                              dropdown_fg_color="#121218", dropdown_text_color=TEXT_PRIMARY,
+                                              dropdown_hover_color="#1E1E26", text_color=TEXT_PRIMARY,
+                                              corner_radius=8, height=32, command=self._update_theme_colors)
+        self.theme_option.pack(fill="x")
         
         theme_map = {"cyan": "Cyan", "red": "Rot", "blue": "Blau", "purple": "Lila", "black": "Schwarz"}
         current_theme_display = theme_map.get(_theme, "Cyan")
         self.theme_option.set(current_theme_display)
         
-        # Start-Ansicht Row
-        self.view_frame = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.view_frame.pack(fill="x", padx=40, pady=6)
+        # View dropdown column
+        self.view_col = ctk.CTkFrame(self.options_row, fg_color="transparent")
+        self.view_col.pack(side="left", fill="x", expand=True, padx=(10, 0))
         
-        self.lbl_view = ctk.CTkLabel(self.view_frame, text="Start-Ansicht:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY, width=100, anchor="w")
-        self.lbl_view.pack(side="left", padx=(0, 10))
+        self.lbl_view = ctk.CTkLabel(self.view_col, text="Start-Ansicht", 
+                                     font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color=TEXT_PRIMARY)
+        self.lbl_view.pack(anchor="w", pady=(0, 2))
         
-        self.view_option = ctk.CTkOptionMenu(self.view_frame, values=["Galerie", "Tabelle"],
-                                             fg_color="#1E1E26", button_color=ACCENT_COLOR, button_hover_color=ACCENT_HOVER,
-                                             dropdown_fg_color="#1E1E26", dropdown_text_color=TEXT_PRIMARY,
-                                             dropdown_hover_color="#2A2A35", text_color=TEXT_PRIMARY)
-        self.view_option.pack(side="left", fill="x", expand=True)
+        self.view_option = ctk.CTkOptionMenu(self.view_col, values=["Galerie", "Tabelle"],
+                                             fg_color="#121218", button_color=ACCENT_COLOR, button_hover_color=ACCENT_HOVER,
+                                             dropdown_fg_color="#121218", dropdown_text_color=TEXT_PRIMARY,
+                                             dropdown_hover_color="#1E1E26", text_color=TEXT_PRIMARY,
+                                             corner_radius=8, height=32)
+        self.view_option.pack(fill="x")
         
         from api import load_config
         current_view = load_config().get("default_view", "Galerie")
         self.view_option.set(current_view)
         
-        # Database Options Row
-        self.db_frame = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.db_frame.pack(fill="x", padx=40, pady=6)
+        # --- SECTION 3: DATENBANK-VERWALTUNG ---
+        self.lbl_sec_db = ctk.CTkLabel(self.container, text="LOKALE FILMDATENBANK", 
+                                       font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), text_color=TEXT_SECONDARY)
+        self.lbl_sec_db.pack(anchor="w", padx=40, pady=(10, 3))
         
-        self.lbl_db_opt = ctk.CTkLabel(self.db_frame, text="Datenbank:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY, width=100, anchor="w")
-        self.lbl_db_opt.pack(side="left", padx=(0, 10))
+        # Backup & Restore Row (Side-by-side)
+        self.db_action_row = ctk.CTkFrame(self.container, fg_color="transparent")
+        self.db_action_row.pack(fill="x", padx=40, pady=4)
         
-        self.btn_reset_db = ctk.CTkButton(self.db_frame, text="Datenbank leeren / neu starten", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-                                          fg_color="#ef4444", text_color="#FFFFFF", hover_color="#dc2626", height=28, command=self._reset_database_clicked)
-        self.btn_reset_db.pack(side="left", fill="x", expand=True)
-        
-        # Database Backup & Restore Row
-        self.db_action_frame = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.db_action_frame.pack(fill="x", padx=40, pady=6)
-        
-        self.lbl_db_act = ctk.CTkLabel(self.db_action_frame, text="DB Aktionen:", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=TEXT_PRIMARY, width=100, anchor="w")
-        self.lbl_db_act.pack(side="left", padx=(0, 10))
-        
-        self.btn_backup_db = ctk.CTkButton(self.db_action_frame, text="Backup erstellen", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+        self.btn_backup_db = ctk.CTkButton(self.db_action_row, text="Backup erstellen", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
                                            fg_color="transparent", text_color=TEXT_PRIMARY, border_color=ACCENT_COLOR, border_width=1,
-                                           hover_color="#0A252E", height=28, command=self._backup_database_clicked)
+                                           hover_color="#0A252E", height=30, corner_radius=8, command=self._backup_database_clicked)
         self.btn_backup_db.pack(side="left", fill="x", expand=True, padx=(0, 5))
         
-        self.btn_restore_db = ctk.CTkButton(self.db_action_frame, text="Backup laden", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+        self.btn_restore_db = ctk.CTkButton(self.db_action_row, text="Backup laden", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
                                             fg_color="transparent", text_color=TEXT_PRIMARY, border_color=ACCENT_COLOR, border_width=1,
-                                            hover_color="#0A252E", height=28, command=self._restore_database_clicked)
+                                            hover_color="#0A252E", height=30, corner_radius=8, command=self._restore_database_clicked)
         self.btn_restore_db.pack(side="left", fill="x", expand=True, padx=(5, 0))
+        
+        # Reset DB Row (Centered)
+        self.db_reset_row = ctk.CTkFrame(self.container, fg_color="transparent")
+        self.db_reset_row.pack(fill="x", padx=40, pady=4)
+        
+        self.btn_reset_db = ctk.CTkButton(self.db_reset_row, text="Datenbank leeren / neu starten", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                                          fg_color="#ef4444", text_color="#FFFFFF", hover_color="#dc2626", height=30, corner_radius=8, command=self._reset_database_clicked)
+        self.btn_reset_db.pack(fill="x", expand=True)
         
         # Status Label
         self.lbl_status = ctk.CTkLabel(self.container, text="Status: Nicht getestet", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color=TEXT_SECONDARY)
-        self.lbl_status.pack(pady=5)
+        self.lbl_status.pack(pady=(8, 4))
         
-        # Actions Row
+        # Actions Row at the bottom
         self.btn_row = ctk.CTkFrame(self.container, fg_color="transparent")
-        self.btn_row.pack(pady=10)
+        self.btn_row.pack(pady=(5, 15))
         
         self.btn_test = ctk.CTkButton(self.btn_row, text="Testen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
                                       fg_color="transparent", text_color=TEXT_PRIMARY, border_color=ACCENT_COLOR, border_width=1,
-                                      hover_color="#0A252E", command=self._test_key)
+                                      hover_color="#0A252E", height=32, width=100, corner_radius=8, command=self._test_key)
         self.btn_test.pack(side="left", padx=10)
         
         self.btn_save = ctk.CTkButton(self.btn_row, text="Speichern & Schließen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-                                      fg_color=ACCENT_COLOR, text_color="#000000", hover_color=ACCENT_HOVER, command=self._save_key)
+                                      fg_color=ACCENT_COLOR, text_color="#000000", hover_color=ACCENT_HOVER, height=32, width=160, corner_radius=8, command=self._save_key)
         self.btn_save.pack(side="left", padx=10)
         
         self.btn_cancel = ctk.CTkButton(self.btn_row, text="Abbrechen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-                                        fg_color="transparent", text_color=TEXT_SECONDARY, hover_color="#2A2A35", command=self.on_close_callback)
+                                        fg_color="transparent", text_color=TEXT_SECONDARY, hover_color="#2A2A35", height=32, width=100, corner_radius=8, command=self.on_close_callback)
         self.btn_cancel.pack(side="left", padx=10)
         
         # Credits in the bottom-left corner
@@ -1032,6 +1062,45 @@ class SettingsOverlay(ctk.CTkFrame):
                                         text_color=TEXT_SECONDARY, anchor="sw", justify="left")
         self.lbl_credits.place(relx=0.02, rely=0.98, anchor="sw")
         
+        # Apply current theme colors live on load
+        self._update_theme_colors(current_theme_display)
+
+    def _update_theme_colors(self, choice):
+        """Dynamically updates the settings elements accent colors live based on dropdown selection."""
+        theme_map = {"Cyan": "cyan", "Rot": "red", "Blau": "blue", "Lila": "purple", "Schwarz": "black"}
+        theme_str = theme_map.get(choice, "cyan")
+        
+        if theme_str == "cyan":
+            accent = "#00F0FF"
+            accent_hover = "#00B3C2"
+            glow_hover = "#0A252E"
+        elif theme_str == "red":
+            accent = "#EF4444"
+            accent_hover = "#DC2626"
+            glow_hover = "#2E0A0A"
+        elif theme_str == "blue":
+            accent = "#3B82F6"
+            accent_hover = "#2563EB"
+            glow_hover = "#0A182E"
+        elif theme_str == "purple":
+            accent = "#A855F7"
+            accent_hover = "#9333EA"
+            glow_hover = "#1F0A2E"
+        elif theme_str == "black":
+            accent = "#E0E0E0"
+            accent_hover = "#A0A0A0"
+            glow_hover = "#222222"
+            
+        self.lbl_title.configure(text_color=accent)
+        self.theme_option.configure(button_color=accent, button_hover_color=accent_hover)
+        self.view_option.configure(button_color=accent, button_hover_color=accent_hover)
+        
+        # Buttons
+        self.btn_test.configure(border_color=accent, hover_color=glow_hover)
+        self.btn_save.configure(fg_color=accent, hover_color=accent_hover)
+        self.btn_backup_db.configure(border_color=accent, hover_color=glow_hover)
+        self.btn_restore_db.configure(border_color=accent, hover_color=glow_hover)
+
     def _test_key(self):
         test_key = self.entry_key.get().strip()
         test_github = self.entry_github.get().strip()
@@ -1891,7 +1960,7 @@ class CinePalastApp(ctk.CTk):
 
     def reload_theme(self):
         """Reloads the theme configuration from config.json and updates the GUI live without restarting."""
-        global BG_COLOR, PANEL_COLOR, ACCENT_COLOR, ACCENT_HOVER, CARD_BORDER, IMAGE_CACHE, _theme
+        global BG_COLOR, PANEL_COLOR, ACCENT_COLOR, ACCENT_HOVER, CARD_BORDER, IMAGE_CACHE, _theme, GLOW_BG, GLOW_HOVER
         
         # Temporarily unbind resize event to prevent layout loop during destruction/recreation
         try:
@@ -1915,30 +1984,40 @@ class CinePalastApp(ctk.CTk):
             ACCENT_COLOR = "#00F0FF"
             ACCENT_HOVER = "#00B3C2"
             CARD_BORDER = "#1E1E26"
+            GLOW_BG = "#041E26"
+            GLOW_HOVER = "#0A252E"
         elif theme_str == "red":
             BG_COLOR = "#0B0B0F"
             PANEL_COLOR = "#15151C"
             ACCENT_COLOR = "#EF4444"
             ACCENT_HOVER = "#DC2626"
             CARD_BORDER = "#1E1E26"
+            GLOW_BG = "#220808"
+            GLOW_HOVER = "#2E0A0A"
         elif theme_str == "blue":
             BG_COLOR = "#0B0B0F"
             PANEL_COLOR = "#15151C"
             ACCENT_COLOR = "#3B82F6"
             ACCENT_HOVER = "#2563EB"
             CARD_BORDER = "#1E1E26"
+            GLOW_BG = "#081022"
+            GLOW_HOVER = "#0A182E"
         elif theme_str == "purple":
             BG_COLOR = "#0B0B0F"
             PANEL_COLOR = "#15151C"
             ACCENT_COLOR = "#A855F7"
             ACCENT_HOVER = "#9333EA"
             CARD_BORDER = "#1E1E26"
+            GLOW_BG = "#150822"
+            GLOW_HOVER = "#1F0A2E"
         elif theme_str == "black":
             BG_COLOR = "#050505"
             PANEL_COLOR = "#0D0D10"
             ACCENT_COLOR = "#E0E0E0"
             ACCENT_HOVER = "#A0A0A0"
             CARD_BORDER = "#1A1A22"
+            GLOW_BG = "#111111"
+            GLOW_HOVER = "#222222"
             
         # Update window background
         self.configure(fg_color=BG_COLOR)
@@ -1953,6 +2032,9 @@ class CinePalastApp(ctk.CTk):
             self.gallery_scroll.destroy()
         if hasattr(self, "table_container") and self.table_container.winfo_exists():
             self.table_container.destroy()
+            
+        # Force immediate destruction of widgets to clear layout packing slot issues
+        self.update_idletasks()
             
         self._setup_top_panel()
         self.gallery_scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
