@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+ENV/
+env/
+
+# IDEs (IntelliJ / PyCharm)
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Database
+cinepalast.db
+
+# Configuration (contains TMDB API key)
+config.json
+
+# Local Assets (downloaded posters and banners)
+assets/posters/*
+assets/banners/*
+!assets/posters/.gitkeep
+!assets/banners/.gitkeep
+
+# PyInstaller / Compilation
+build/
+dist/
+*.spec

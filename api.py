@@ -1,0 +1,241 @@
+import os
+import json
+import requests
+from typing import List, Dict, Optional
+
+CONFIG_FILE = "config.json"
+
+def load_api_key() -> str:
+    """Loads the TMDB API key from config.json. Returns empty string if not set."""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("api_key", "").strip()
+        except Exception:
+            pass
+    return ""
+
+def save_api_key(api_key: str):
+    """Saves the TMDB API key to config.json."""
+    data = {"api_key": api_key.strip()}
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+class TMDBClient:
+    """
+    HTTP client targeting TMDB API fetching metadata in German ('de-DE').
+    """
+    BASE_URL = "https://api.themoviedb.org/3"
+    IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
+
+    def __init__(self):
+        pass
+
+    def get_api_key(self) -> str:
+        return load_api_key()
+
+    def has_valid_key(self) -> bool:
+        key = self.get_api_key()
+        if not key:
+            return False
+        # Test the key briefly with a lightweight request
+        try:
+            url = f"{self.BASE_URL}/configuration"
+            response = requests.get(url, params={"api_key": key}, timeout=5)
+            return response.status_code == 200
+        except Exception:
+            return False
+
+    def search_movies(self, query: str) -> List[Dict]:
+        """
+        Searches TMDB for movies by title query.
+        Returns a list of search results.
+        """
+        api_key = self.get_api_key()
+        if not api_key:
+            raise ValueError("Kein TMDB API-Schlüssel konfiguriert.")
+
+        url = f"{self.BASE_URL}/search/movie"
+        params = {
+            "api_key": api_key,
+            "query": query,
+            "language": "de-DE",
+            "page": 1
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        results = []
+        for item in data.get("results", []):
+            release_date = item.get("release_date", "")
+            year = release_date.split("-")[0] if release_date else "k.A."
+            results.append({
+                "tmdb_id": item["id"],
+                "titel": item["title"],
+                "original_titel": item.get("original_title", ""),
+                "jahr": year,
+                "poster_path": item.get("poster_path")
+            })
+        return results
+
+    def fetch_movie_details(self, tmdb_id: int) -> Dict:
+        """
+        Fetches full details for a movie from TMDB including credits and release dates.
+        Parses it into the SQLite schema dictionary.
+        """
+        api_key = self.get_api_key()
+        if not api_key:
+            raise ValueError("Kein TMDB API-Schlüssel konfiguriert.")
+
+        # Request details and append credits and release_dates
+        url = f"{self.BASE_URL}/movie/{tmdb_id}"
+        params = {
+            "api_key": api_key,
+            "language": "de-DE",
+            "append_to_response": "credits,release_dates"
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        # 1. Parse Title
+        titel = data.get("title", "Unbekannt")
+
+        # 2. Parse Year
+        release_date = data.get("release_date", "")
+        jahr = int(release_date.split("-")[0]) if release_date else None
+
+        # 3. Parse Genres
+        genres_list = [g.get("name") for g in data.get("genres", []) if g.get("name")]
+        genre_richtung = ", ".join(genres_list) if genres_list else "k.A."
+
+        # 4. Parse Runtime
+        laufzeit = data.get("runtime", 0)
+        laufzeit_min = int(laufzeit) if laufzeit else 0
+
+        # 5. Parse Plot description
+        handlung_beschreibung = data.get("overview", "")
+        if not handlung_beschreibung:
+            handlung_beschreibung = "Keine deutsche Beschreibung vorhanden."
+
+        # 6. Parse FSK (German Certification)
+        fsk = self._extract_fsk(data.get("release_dates", {}))
+
+        # 7. Parse Production Company / Studio
+        companies = [c.get("name") for c in data.get("production_companies", []) if c.get("name")]
+        produktionsfirma_studio = ", ".join(companies) if companies else "k.A."
+
+        # 8. Parse Director & Cast
+        credits = data.get("credits", {})
+        cast = credits.get("cast", [])
+        crew = credits.get("crew", [])
+
+        # Get top 10 actors
+        actors = [member.get("name") for member in cast[:10] if member.get("name")]
+        schauspieler_cast = ", ".join(actors) if actors else "k.A."
+
+        # Get Directors
+        directors = [member.get("name") for member in crew if member.get("job") == "Director"]
+        regisseur = ", ".join(directors) if directors else "k.A."
+
+        # 9. Parse Franchise / Collection
+        collection = data.get("belongs_to_collection")
+        filmreihe = collection.get("name") if collection else ""
+
+        # 10. Parse Production Country
+        countries = [country.get("name") for country in data.get("production_countries", []) if country.get("name")]
+        produktionsland = ", ".join(countries) if countries else "k.A."
+
+        # 11. Deutsche Synchronsprecher
+        # TMDB doesn't reliably index German dubbing cast. We leave this empty for manual input as requested.
+        deutsche_synchronsprecher = ""
+
+        # 12. Local assets path setup (download later)
+        poster_path = data.get("poster_path")
+        banner_path = data.get("backdrop_path")
+
+        poster_pfad = self.download_and_cache_image(poster_path, tmdb_id, "poster")
+        banner_pfad = self.download_and_cache_image(banner_path, tmdb_id, "banner")
+
+        return {
+            "titel": titel,
+            "jahr": jahr,
+            "schauspieler_cast": schauspieler_cast,
+            "genre_richtung": genre_richtung,
+            "laufzeit_min": laufzeit_min,
+            "handlung_beschreibung": handlung_beschreibung,
+            "fsk": fsk,
+            "produktionsfirma_studio": produktionsfirma_studio,
+            "regisseur": regisseur,
+            "filmreihe": filmreihe,
+            "produktionsland": produktionsland,
+            "deutsche_synchronsprecher": deutsche_synchronsprecher,
+            "poster_pfad": poster_pfad,
+            "banner_pfad": banner_pfad
+        }
+
+    def _extract_fsk(self, release_dates_data: Dict) -> str:
+        """
+        Extracts FSK rating from TMDB release dates for Germany (DE).
+        Returns a string representation (e.g., '0', '6', '12', '16', '18') or 'k.A.'.
+        """
+        results = release_dates_data.get("results", [])
+        for country_data in results:
+            if country_data.get("iso_3166_1") == "DE":
+                for date_info in country_data.get("release_dates", []):
+                    cert = date_info.get("certification", "").strip()
+                    if cert:
+                        # Ensure we map TMDB values nicely. FSK values are normally numbers.
+                        # Sometimes it might return e.g. "FSK 12" instead of just "12", so we sanitize it.
+                        clean_cert = cert.lower().replace("fsk", "").replace("ab", "").strip()
+                        if clean_cert in ["0", "6", "12", "16", "18"]:
+                            return clean_cert
+                        return cert # fallback if it is another valid certification string
+        return "k.A."
+
+    def download_and_cache_image(self, remote_path: Optional[str], tmdb_id: int, image_type: str) -> str:
+        """
+        Downloads a poster or banner image from TMDB, checks if it is already cached locally,
+        and saves it to assets/posters or assets/banners.
+        
+        :param remote_path: Relative TMDB image path (e.g. '/backdrop.jpg').
+        :param tmdb_id: TMDB ID of the movie to create a unique local file name.
+        :param image_type: Either 'poster' or 'banner'.
+        :return: Local relative path to the image, or empty string if not available.
+        """
+        if not remote_path:
+            return ""
+
+        extension = os.path.splitext(remote_path)[1]
+        if not extension:
+            extension = ".jpg" # Default to jpg
+
+        folder = "assets/posters" if image_type == "poster" else "assets/banners"
+        local_filename = f"{tmdb_id}{extension}"
+        local_relative_path = f"{folder}/{local_filename}"
+
+        # 1. File-check lookup (caching)
+        if os.path.exists(local_relative_path) and os.path.getsize(local_relative_path) > 0:
+            return local_relative_path
+
+        # 2. Download from TMDB
+        # Posters: we use w500. Banners: we use w1280.
+        size = "w500" if image_type == "poster" else "w1280"
+        download_url = f"{self.IMAGE_BASE_URL}/{size}{remote_path}"
+
+        try:
+            os.makedirs(folder, exist_ok=True)
+            response = requests.get(download_url, stream=True, timeout=15)
+            if response.status_code == 200:
+                with open(local_relative_path, "wb") as f:
+                    for chunk in response.iter_content(1024):
+                        f.write(chunk)
+                return local_relative_path
+        except Exception as e:
+            print(f"Error downloading image {download_url}: {e}")
+            
+        return ""
