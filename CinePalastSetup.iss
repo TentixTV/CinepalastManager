@@ -7,7 +7,7 @@ AppId={{5E583391-766F-48A0-A7EA-918991D4C63E}
 AppName=CinePalast Manager
 AppVersion=1.0
 AppPublisher=Mannis Kinopalast
-DefaultDirName={localappdata}\CinePalast Manager
+DefaultDirName={localappdata}\CinePalast Manager\app
 DefaultGroupName=CinePalast Manager
 OutputDir=.
 OutputBaseFilename=CinePalastSetup
@@ -42,8 +42,8 @@ Source: "assets\banners\*"; DestDir: "{app}\assets\banners"; Flags: ignoreversio
 ; Verknüpfung im Startmenü erstellen
 Name: "{group}\CinePalast Manager"; Filename: "{app}\CinePalast.exe"
 Name: "{group}\Uninstall CinePalast Manager"; Filename: "{uninstallexe}"
-; Verknüpfung auf dem Desktop erstellen
-Name: "{commondesktop}\CinePalast Manager"; Filename: "{app}\CinePalast.exe"; Tasks: desktopicon
+Name: "{userdesktop}\CinePalast Manager"; Filename: "{app}\CinePalast.exe"; Tasks: desktopicon
+
 
 
 [Run]
