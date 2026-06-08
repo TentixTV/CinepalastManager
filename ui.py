@@ -1158,8 +1158,9 @@ class CinePalastApp(ctk.CTk):
         self.refresh_gallery()
         
     def _load_app_icon(self):
-        """Checks the project root for icon.ico or icon.png and applies it natively."""
+        """Checks the project root for icon.ico or assets/DTB.png and applies it natively."""
         icon_ico = "icon.ico"
+        icon_dtb = "assets/DTB.png"
         icon_png = "icon.png"
         
         if os.path.exists(icon_ico):
@@ -1167,9 +1168,17 @@ class CinePalastApp(ctk.CTk):
                 self.iconbitmap(icon_ico)
             except Exception as e:
                 print(f"Failed to load icon.ico: {e}")
+        elif os.path.exists(icon_dtb):
+            try:
+                from PIL import ImageTk
+                img = Image.open(icon_dtb)
+                self.tk_icon = ImageTk.PhotoImage(img)
+                self.iconphoto(False, self.tk_icon)
+            except Exception as e:
+                print(f"Failed to load assets/DTB.png: {e}")
         elif os.path.exists(icon_png):
             try:
-                # Fallback to PNG iconphoto using PIL
+                from PIL import ImageTk
                 img = Image.open(icon_png)
                 self.tk_icon = ImageTk.PhotoImage(img)
                 self.iconphoto(False, self.tk_icon)

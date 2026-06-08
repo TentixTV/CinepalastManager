@@ -27,6 +27,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 ; Hauptanwendung kopieren
 Source: "dist\CinePalast.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Standard-App-Icon kopieren
+Source: "assets\DTB.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 ; Hinweis: Gecachte Ordner (assets/) und die Datenbank (cinepalast.db) werden 
 ; automatisch im selben Ordner erstellt, in dem die .exe gestartet wird.
 

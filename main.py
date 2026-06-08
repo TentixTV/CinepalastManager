@@ -1,13 +1,28 @@
 import sys
+import os
+from PIL import Image
 from database import DatabaseManager
 from api import TMDBClient
 from ui import CinePalastApp
+
+def ensure_ico_exists():
+    """Converts assets/DTB.png to icon.ico if it doesn't exist yet."""
+    icon_ico = "icon.ico"
+    png_source = "assets/DTB.png"
+    if not os.path.exists(icon_ico) and os.path.exists(png_source):
+        try:
+            img = Image.open(png_source)
+            icon_sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+            img.save(icon_ico, format="ICO", sizes=icon_sizes)
+        except Exception as e:
+            print(f"Fehler bei Konvertierung von assets/DTB.png zu icon.ico: {e}")
 
 def main():
     """
     Main application entry point.
     Initializes local SQLite database, sets up TMDB client, and runs the CustomTkinter app.
     """
+    ensure_ico_exists()
     try:
         # Initialize Database Manager (creates db and asset folders if needed)
         db_manager = DatabaseManager(db_path="cinepalast.db")
