@@ -395,7 +395,7 @@ def check_for_update(current_version: str) -> Optional[str]:
     if not token:
         return None
         
-    url = "https://api.github.com/repos/TentixTV/CinepalastManager/contents/version.json?ref=master"
+    url = "https://api.github.com/repos/TentixTV/CinepalastManager/contents/version.json?ref=main"
     headers = {
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3.raw"
@@ -417,7 +417,7 @@ def download_update_installer(token: str, dest_path: str, progress_callback=None
     Downloads CinePalastSetup.exe from the private repository on GitHub.
     Uses the application/vnd.github.v3.raw Accept header to stream raw bytes.
     """
-    url = "https://api.github.com/repos/TentixTV/CinepalastManager/contents/CinePalastSetup.exe?ref=master"
+    url = "https://api.github.com/repos/TentixTV/CinepalastManager/contents/CinePalastSetup.exe?ref=main"
     headers = {
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3.raw"
