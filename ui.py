@@ -210,23 +210,37 @@ def create_placeholder_image(size: tuple, title: str, img_type: str) -> Image.Im
         draw.text((width // 2, height // 2), title, fill=ACCENT_COLOR, anchor="mm", font=font)
         return img
 
+IMAGE_CACHE = {}
+
 def get_ctk_image(path: Optional[str], size: tuple, title: str, img_type: str) -> ctk.CTkImage:
     """
-    Loads an image from the disk or falls back to a generated placeholder.
+    Loads an image from the disk or falls back to a generated placeholder, caching results.
     Wraps it in a CTkImage for high-DPI scaling.
     """
+    cache_key = (path, size)
+    if path and cache_key in IMAGE_CACHE:
+        return IMAGE_CACHE[cache_key]
+        
     if path and os.path.exists(path):
         try:
             pil_img = Image.open(path)
             if pil_img.mode != "RGB":
                 pil_img = pil_img.convert("RGB")
-            return ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=size)
+            img = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=size)
+            IMAGE_CACHE[cache_key] = img
+            return img
         except Exception as e:
             print(f"Error loading image from {path}: {e}")
             
     # Fallback if image path is empty or loading fails
+    fallback_key = (None, size, title, img_type)
+    if fallback_key in IMAGE_CACHE:
+        return IMAGE_CACHE[fallback_key]
+        
     fallback_pil = create_placeholder_image(size, title, img_type)
-    return ctk.CTkImage(light_image=fallback_pil, dark_image=fallback_pil, size=size)
+    img = ctk.CTkImage(light_image=fallback_pil, dark_image=fallback_pil, size=size)
+    IMAGE_CACHE[fallback_key] = img
+    return img
 
 
 class MovieCard(ctk.CTkFrame):
@@ -389,7 +403,7 @@ class LoadingOverlay(ctk.CTkFrame):
     An overlay that prevents interaction and shows a loading spinner state.
     """
     def __init__(self, parent, message: str = "Lade Daten... Bitte warten."):
-        super().__init__(parent, fg_color="BG_COLOR")
+        super().__init__(parent, fg_color=BG_COLOR)
         
         self.container = ctk.CTkFrame(self, fg_color=PANEL_COLOR, border_width=1, border_color=CARD_BORDER, corner_radius=12)
         self.container.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.4, relheight=0.25)
@@ -417,7 +431,7 @@ class DetailOverlay(ctk.CTkFrame):
     Displays rich media detail hierarchy: banner, poster, core fields, cast, description, actions.
     """
     def __init__(self, parent, movie: dict, on_close_callback, on_delete_callback, on_edit_callback):
-        super().__init__(parent, fg_color="BG_COLOR")
+        super().__init__(parent, fg_color=BG_COLOR)
         self.movie = movie
         self.on_close_callback = on_close_callback
         self.on_delete_callback = on_delete_callback
@@ -597,7 +611,7 @@ class SettingsOverlay(ctk.CTkFrame):
     Overlay to enter, test, and save the TMDB API key and GitHub Token.
     """
     def __init__(self, parent, tmdb_client, on_close_callback):
-        super().__init__(parent, fg_color="BG_COLOR")
+        super().__init__(parent, fg_color=BG_COLOR)
         self.tmdb_client = tmdb_client
         self.on_close_callback = on_close_callback
         self.parent = parent
@@ -855,7 +869,7 @@ class AddMovieOverlay(ctk.CTkFrame):
     2. Manual creation from scratch with local asset copy options
     """
     def __init__(self, parent, tmdb_client, on_add_callback, on_close_callback):
-        super().__init__(parent, fg_color="BG_COLOR")
+        super().__init__(parent, fg_color=BG_COLOR)
         self.tmdb_client = tmdb_client
         self.on_add_callback = on_add_callback # callback: function(movie_data)
         self.on_close_callback = on_close_callback
@@ -1349,7 +1363,7 @@ class EditMovieOverlay(ctk.CTkFrame):
     Pre-populates fields with database records.
     """
     def __init__(self, parent, movie: dict, on_save_callback, on_close_callback):
-        super().__init__(parent, fg_color="BG_COLOR")
+        super().__init__(parent, fg_color=BG_COLOR)
         self.movie = movie
         self.on_save_callback = on_save_callback
         self.on_close_callback = on_close_callback
@@ -1361,7 +1375,6 @@ class EditMovieOverlay(ctk.CTkFrame):
         self.btn_close = ctk.CTkButton(self.container, text="✕", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
                                        fg_color="transparent", text_color=TEXT_SECONDARY, hover_color="#2E2E3A",
                                        width=30, height=30, command=self.on_close_callback)
-        self.btn_close.place(x=self.container.winfo_width() - 40, y=10)
         self.btn_close.pack(side="top", anchor="ne", padx=10, pady=10)
         
         self.lbl_title = ctk.CTkLabel(self.container, text=f"FILM BEARBEITEN: {self.movie.get('titel')}", font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"), text_color=ACCENT_COLOR)
@@ -1571,7 +1584,7 @@ class CinePalastApp(ctk.CTk):
         # 4. First load
         self._on_view_changed(self.view_mode)
         self.after(1000, self.check_for_updates_background)
-        self.bind("<Button-1>", self._on_window_click)
+        self.bind_all("<Button-1>", self._on_window_click, add="+")
 
 
         
@@ -1745,29 +1758,32 @@ class CinePalastApp(ctk.CTk):
             self._regrid_movies()
 
     def _on_search_key(self, event):
-        """Instantly queries SQLite database, and schedules online TMDB search."""
-        self.refresh_gallery()
-        
+        """Debounces the entire search process (local and online) to prevent lag."""
         query = self.entry_main_search.get().strip()
+        
         if not query:
+            if hasattr(self, "_main_search_timer") and self._main_search_timer:
+                self.after_cancel(self._main_search_timer)
             self._hide_suggestions()
             self.online_movies_list = []
-            self._regrid_movies()
+            self.refresh_gallery()
             return
             
-        # Query local database for matches and display floating suggestions
-        local_matches = self.db_manager.search_movies(query)
-        self._show_suggestions(local_matches)
-        
-        # Debounce TMDB online search
+        # Debounce local refresh, suggestion display, and TMDB search by 250ms
         if hasattr(self, "_main_search_timer") and self._main_search_timer:
             self.after_cancel(self._main_search_timer)
             
-        if len(query) >= 2 and self.tmdb_client.get_api_key():
-            self._main_search_timer = self.after(500, lambda: self._perform_main_online_search(query))
-        else:
-            self.online_movies_list = []
-            self._regrid_movies()
+        def execute_search():
+            self.refresh_gallery()
+            local_matches = self.db_manager.search_movies(query)
+            self._show_suggestions(local_matches)
+            if len(query) >= 2 and self.tmdb_client.get_api_key():
+                self._perform_main_online_search(query)
+            else:
+                self.online_movies_list = []
+                self._regrid_movies()
+                
+        self._main_search_timer = self.after(250, execute_search)
 
 
     def _perform_main_online_search(self, query):
@@ -1839,6 +1855,7 @@ class CinePalastApp(ctk.CTk):
                                             on_delete_callback=self._delete_movie,
                                             on_edit_callback=self._show_edit_overlay)
         self.active_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.active_overlay.lift()
 
     def _show_add_overlay(self):
         self._close_active_overlay()
@@ -1846,6 +1863,7 @@ class CinePalastApp(ctk.CTk):
                                               on_add_callback=self._add_movie,
                                               on_close_callback=self._close_active_overlay)
         self.active_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.active_overlay.lift()
         
     def _show_edit_overlay(self, movie: dict):
         self._close_active_overlay()
@@ -1853,12 +1871,14 @@ class CinePalastApp(ctk.CTk):
                                                on_save_callback=self._update_movie,
                                                on_close_callback=self._close_active_overlay)
         self.active_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.active_overlay.lift()
 
     def _show_settings_overlay(self):
         self._close_active_overlay()
         self.active_overlay = SettingsOverlay(self, self.tmdb_client,
                                               on_close_callback=self._close_active_overlay)
         self.active_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.active_overlay.lift()
 
     # --- DATABASE CALLBACKS ---
     def _add_movie(self, movie_data: dict):
@@ -2168,7 +2188,7 @@ class CinePalastApp(ctk.CTk):
         if hasattr(self, "suggestions_frame") and self.suggestions_frame and self.suggestions_frame.winfo_exists():
             try:
                 # Get the widget that was clicked
-                widget = self.winfo_containing(event.x_root, event.y_root)
+                widget = event.widget
                 # If widget is not suggestions_frame and suggestions_frame is not a parent of it, hide suggestions
                 if widget != self.entry_main_search:
                     is_inside = False
