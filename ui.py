@@ -1,6 +1,8 @@
 import os
 import shutil
 import threading
+import io
+import requests
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import customtkinter as ctk
@@ -454,7 +456,7 @@ class SettingsOverlay(ctk.CTkFrame):
 class AddMovieOverlay(ctk.CTkFrame):
     """
     Overlay allowing movie additions:
-    1. Online Search (via TMDB) with thread-safe downloads
+    1. Online Search (via TMDB) with split-pane detailed preview
     2. Manual creation from scratch with local asset copy options
     """
     def __init__(self, parent, tmdb_client, on_add_callback, on_close_callback):
@@ -462,6 +464,7 @@ class AddMovieOverlay(ctk.CTkFrame):
         self.tmdb_client = tmdb_client
         self.on_add_callback = on_add_callback # callback: function(movie_data)
         self.on_close_callback = on_close_callback
+        self.selected_row = None
         
         self.container = ctk.CTkFrame(self, fg_color=PANEL_COLOR, border_width=1, border_color=CARD_BORDER, corner_radius=16)
         self.container.place(relx=0.08, rely=0.08, relwidth=0.84, relheight=0.84)
@@ -470,7 +473,6 @@ class AddMovieOverlay(ctk.CTkFrame):
         self.btn_close = ctk.CTkButton(self.container, text="✕", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
                                        fg_color="transparent", text_color=TEXT_SECONDARY, hover_color="rgba(255,255,255,0.05)",
                                        width=30, height=30, command=self.on_close_callback)
-        self.btn_close.place(x=self.container.winfo_width() - 40, y=10)
         self.btn_close.pack(side="top", anchor="ne", padx=10, pady=10)
         
         self.lbl_title = ctk.CTkLabel(self.container, text="NEUEN FILM HINZUFÜGEN", font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"), text_color=ACCENT_COLOR)
@@ -490,25 +492,48 @@ class AddMovieOverlay(ctk.CTkFrame):
         
     # --- ONLINE SEARCH TAB ---
     def _setup_search_tab(self):
-        # Search Entry and Search Button
-        self.search_bar_frame = ctk.CTkFrame(self.tab_search, fg_color="transparent")
-        self.search_bar_frame.pack(fill="x", pady=10, padx=10)
+        # Split search tab into a left pane (search results list) and right pane (detailed preview)
+        self.split_frame = ctk.CTkFrame(self.tab_search, fg_color="transparent")
+        self.split_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        self.split_frame.columnconfigure(0, weight=4) # Results list width ratio
+        self.split_frame.columnconfigure(1, weight=6) # Preview panel width ratio
+        self.split_frame.rowconfigure(0, weight=1)
+        
+        # Left side: search query inputs & results list
+        self.left_pane = ctk.CTkFrame(self.split_frame, fg_color="transparent")
+        self.left_pane.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        
+        # Search Entry and Search Button inside left pane
+        self.search_bar_frame = ctk.CTkFrame(self.left_pane, fg_color="transparent")
+        self.search_bar_frame.pack(fill="x", pady=(0, 10))
         
         self.entry_search = ctk.CTkEntry(self.search_bar_frame, placeholder_text="Filmtitel in Deutsch suchen...", fg_color="#1E1E26", border_color=CARD_BORDER)
         self.entry_search.pack(side="left", fill="x", expand=True, padx=(0, 10))
         self.entry_search.bind("<Return>", lambda e: self._perform_online_search())
         
         self.btn_search = ctk.CTkButton(self.search_bar_frame, text="Suchen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-                                        fg_color=ACCENT_COLOR, text_color="#000000", hover_color=ACCENT_HOVER, width=100, command=self._perform_online_search())
+                                        fg_color=ACCENT_COLOR, text_color="#000000", hover_color=ACCENT_HOVER, width=80, command=self._perform_online_search)
         self.btn_search.pack(side="right")
         
         # Search Results List Container
-        self.results_scroll = ctk.CTkScrollableFrame(self.tab_search, fg_color="transparent", border_width=1, border_color=CARD_BORDER, corner_radius=8)
-        self.results_scroll.pack(fill="both", expand=True, padx=10, pady=10)
+        self.results_scroll = ctk.CTkScrollableFrame(self.left_pane, fg_color="transparent", border_width=1, border_color=CARD_BORDER, corner_radius=8)
+        self.results_scroll.pack(fill="both", expand=True)
         
-        self.results_empty = ctk.CTkLabel(self.results_scroll, text="Bitte geben Sie einen Filmtitel ein und klicken Sie auf Suchen.", font=ctk.CTkFont(family="Segoe UI", size=12, italic=True), text_color=TEXT_SECONDARY)
+        self.results_empty = ctk.CTkLabel(self.results_scroll, text="Bitte geben Sie einen Filmtitel ein\nund klicken Sie auf Suchen.", font=ctk.CTkFont(family="Segoe UI", size=12, italic=True), text_color=TEXT_SECONDARY)
         self.results_empty.pack(expand=True, pady=100)
         
+        # Right side: preview panel
+        self.preview_panel = ctk.CTkFrame(self.split_frame, fg_color=PANEL_COLOR, border_width=1, border_color=CARD_BORDER, corner_radius=10)
+        self.preview_panel.grid(row=0, column=1, sticky="nsew")
+        
+        self.show_preview_placeholder("Wählen Sie einen Film aus der Liste aus,\num eine Vorschau anzuzeigen.")
+        
+    def show_preview_placeholder(self, text: str):
+        for widget in self.preview_panel.winfo_children():
+            widget.destroy()
+        lbl = ctk.CTkLabel(self.preview_panel, text=text, font=ctk.CTkFont(family="Segoe UI", size=13, italic=True), text_color=TEXT_SECONDARY, justify="center")
+        lbl.pack(expand=True, pady=50)
+
     def _perform_online_search(self):
         query = self.entry_search.get().strip()
         if not query:
@@ -521,10 +546,10 @@ class AddMovieOverlay(ctk.CTkFrame):
         # Verify API Key
         if not self.tmdb_client.get_api_key():
             err_label = ctk.CTkLabel(self.results_scroll, text="Fehler: Kein TMDB API-Schlüssel hinterlegt!\n"
-                                     "Bitte öffnen Sie die Einstellungen und tragen Sie einen Schlüssel ein.", text_color="#ef4444", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
+                                     "Bitte öffnen Sie die Einstellungen und tragen Sie einen Schlüssel ein.", text_color="#ef4444", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), justify="center")
             err_label.pack(pady=40)
             return
-
+ 
         self.btn_search.configure(state="disabled", text="Lade...")
         self.update()
         
@@ -544,24 +569,170 @@ class AddMovieOverlay(ctk.CTkFrame):
                 row.pack(fill="x", pady=4, padx=5)
                 
                 # Fetch small poster preview
-                thumbnail = get_ctk_image(self.tmdb_client.download_and_cache_image(m.get("poster_path"), m["tmdb_id"], "poster") if m.get("poster_path") else "", (45, 65), m["titel"], "poster")
+                thumbnail = get_ctk_image(self.tmdb_client.download_and_cache_image(m.get("poster_path"), m["tmdb_id"], "poster") if m.get("poster_path") else "", (40, 58), m["titel"], "poster")
                 lbl_thumb = ctk.CTkLabel(row, image=thumbnail, text="")
                 lbl_thumb.pack(side="left", padx=10, pady=5)
                 
                 # Info texts
-                lbl_info = ctk.CTkLabel(row, text=f"{m['titel']} ({m['jahr']})\nOriginaltitel: {m['original_titel']}", font=ctk.CTkFont(family="Segoe UI", size=12), text_color=TEXT_PRIMARY, justify="left", anchor="w")
-                lbl_info.pack(side="left", padx=10, fill="both", expand=True)
+                lbl_info = ctk.CTkLabel(row, text=f"{m['titel']} ({m['jahr']})\nOriginal: {m['original_titel']}", font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_PRIMARY, justify="left", anchor="w")
+                lbl_info.pack(side="left", padx=5, fill="both", expand=True)
                 
-                # Import button
-                btn_import = ctk.CTkButton(row, text="Hinzufügen", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-                                           fg_color=ACCENT_COLOR, text_color="#000000", hover_color=ACCENT_HOVER, width=90, height=28,
-                                           command=lambda tid=m["tmdb_id"]: self._import_movie(tid))
-                btn_import.pack(side="right", padx=15, pady=10)
+                # Bind clicks to select rows and show preview
+                tid = m["tmdb_id"]
+                for widget in [row, lbl_thumb, lbl_info]:
+                    widget.bind("<Button-1>", lambda e, id=tid, r=row: self.on_search_row_clicked(id, r))
                 
         except Exception as e:
             self.btn_search.configure(state="normal", text="Suchen")
             err_lbl = ctk.CTkLabel(self.results_scroll, text=f"Fehler bei der Suche: {str(e)}", text_color="#ef4444")
             err_lbl.pack(pady=40)
+
+    def on_search_row_clicked(self, tmdb_id: int, row_widget: ctk.CTkFrame):
+        if hasattr(self, "selected_row") and self.selected_row and self.selected_row.winfo_exists():
+            try:
+                self.selected_row.configure(border_color=CARD_BORDER)
+            except Exception:
+                pass
+        self.selected_row = row_widget
+        try:
+            row_widget.configure(border_color=ACCENT_COLOR)
+        except Exception:
+            pass
+            
+        self.load_movie_preview(tmdb_id)
+
+    def load_movie_preview(self, tmdb_id: int):
+        for widget in self.preview_panel.winfo_children():
+            widget.destroy()
+            
+        loading_label = ctk.CTkLabel(self.preview_panel, text="Lade Film-Vorschau... Bitte warten.", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color=ACCENT_COLOR)
+        loading_label.pack(expand=True, pady=50)
+        self.update()
+        
+        def fetch_preview_thread():
+            try:
+                preview_data = self.tmdb_client.fetch_movie_preview(tmdb_id)
+                poster_pil = None
+                banner_pil = None
+                
+                if preview_data.get("poster_url"):
+                    try:
+                        resp = requests.get(preview_data["poster_url"], timeout=5)
+                        if resp.status_code == 200:
+                            poster_pil = Image.open(io.BytesIO(resp.content))
+                    except Exception as e:
+                        print(f"Error loading preview poster: {e}")
+                        
+                if preview_data.get("banner_url"):
+                    try:
+                        resp = requests.get(preview_data["banner_url"], timeout=5)
+                        if resp.status_code == 200:
+                            banner_pil = Image.open(io.BytesIO(resp.content))
+                    except Exception as e:
+                        print(f"Error loading preview banner: {e}")
+                        
+                self.after(0, lambda: self.display_movie_preview(preview_data, poster_pil, banner_pil))
+            except Exception as e:
+                self.after(0, lambda err=e: self.show_preview_placeholder(f"Fehler beim Laden der Vorschau:\n{str(err)}"))
+                
+        threading.Thread(target=fetch_preview_thread, daemon=True).start()
+
+    def display_movie_preview(self, preview_data: dict, poster_pil: Optional[Image.Image], banner_pil: Optional[Image.Image]):
+        for widget in self.preview_panel.winfo_children():
+            widget.destroy()
+            
+        preview_scroll = ctk.CTkScrollableFrame(self.preview_panel, fg_color="transparent")
+        preview_scroll.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Banner image at top
+        banner_size = (480, 150)
+        if banner_pil:
+            banner_img = ctk.CTkImage(light_image=banner_pil, dark_image=banner_pil, size=banner_size)
+        else:
+            fallback_banner = create_placeholder_image(banner_size, preview_data.get("titel", "Unbekannt"), "banner")
+            banner_img = ctk.CTkImage(light_image=fallback_banner, dark_image=fallback_banner, size=banner_size)
+            
+        banner_label = ctk.CTkLabel(preview_scroll, image=banner_img, text="")
+        banner_label.pack(fill="x", pady=(0, 10))
+        
+        # Title and Year Row
+        title_frame = ctk.CTkFrame(preview_scroll, fg_color="transparent")
+        title_frame.pack(fill="x", pady=5)
+        
+        lbl_title = ctk.CTkLabel(title_frame, text=preview_data.get("titel"), font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"), text_color=ACCENT_COLOR, wraplength=350, justify="left", anchor="w")
+        lbl_title.pack(side="left", anchor="w")
+        
+        year_val = preview_data.get("jahr")
+        year_text = f" ({year_val})" if year_val else ""
+        lbl_year = ctk.CTkLabel(title_frame, text=year_text, font=ctk.CTkFont(family="Segoe UI", size=14), text_color=TEXT_SECONDARY)
+        lbl_year.pack(side="left", anchor="w", padx=5)
+        
+        # FSK and basic info row
+        meta_frame = ctk.CTkFrame(preview_scroll, fg_color="transparent")
+        meta_frame.pack(fill="x", pady=(0, 10))
+        
+        fsk_bg, fsk_fg, fsk_lbl = get_fsk_colors(preview_data.get("fsk", "k.A."))
+        fsk_badge = ctk.CTkLabel(meta_frame, text=fsk_lbl, font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+                                 fg_color=fsk_bg, text_color=fsk_fg, corner_radius=4, width=50, height=20)
+        fsk_badge.pack(side="left")
+        
+        runtime = preview_data.get("laufzeit_min", 0)
+        runtime_text = f"  |  {runtime} Min." if runtime else ""
+        lbl_meta = ctk.CTkLabel(meta_frame, text=f"{runtime_text}  |  {preview_data.get('genre_richtung', 'k.A.')}", font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_SECONDARY, wraplength=400, justify="left")
+        lbl_meta.pack(side="left", padx=5)
+        
+        # Info row (poster + facts)
+        info_row = ctk.CTkFrame(preview_scroll, fg_color="transparent")
+        info_row.pack(fill="x", pady=5)
+        
+        poster_size = (100, 145)
+        if poster_pil:
+            poster_img = ctk.CTkImage(light_image=poster_pil, dark_image=poster_pil, size=poster_size)
+        else:
+            fallback_poster = create_placeholder_image(poster_size, preview_data.get("titel", "Unbekannt"), "poster")
+            poster_img = ctk.CTkImage(light_image=fallback_poster, dark_image=fallback_poster, size=poster_size)
+            
+        poster_label = ctk.CTkLabel(info_row, image=poster_img, text="")
+        poster_label.pack(side="left", padx=(0, 10))
+        
+        # Facts box
+        facts_frame = ctk.CTkFrame(info_row, fg_color="rgba(255,255,255,0.02)", border_width=1, border_color="rgba(255,255,255,0.05)", corner_radius=8)
+        facts_frame.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        
+        def add_fact(label, val):
+            row = ctk.CTkFrame(facts_frame, fg_color="transparent")
+            row.pack(fill="x", pady=2, padx=8)
+            lbl_field = ctk.CTkLabel(row, text=label, font=ctk.CTkFont(family="Segoe UI", size=9, weight="bold"), text_color=TEXT_SECONDARY, width=70, anchor="w")
+            lbl_field.pack(side="left")
+            lbl_val = ctk.CTkLabel(row, text=val, font=ctk.CTkFont(family="Segoe UI", size=9), text_color=TEXT_PRIMARY, wraplength=210, justify="left", anchor="w")
+            lbl_val.pack(side="left", fill="x", expand=True)
+            
+        add_fact("Regisseur:", preview_data.get("regisseur", "k.A."))
+        add_fact("Filmreihe:", preview_data.get("filmreihe", "-") or "-")
+        add_fact("Land:", preview_data.get("produktionsland", "k.A."))
+        add_fact("Studio:", preview_data.get("produktionsfirma_studio", "k.A."))
+        
+        # Description
+        lbl_desc_title = ctk.CTkLabel(preview_scroll, text="Handlung", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=ACCENT_COLOR)
+        lbl_desc_title.pack(anchor="w", pady=(10, 2))
+        
+        desc_text = preview_data.get("handlung_beschreibung", "Keine Beschreibung vorhanden.")
+        lbl_desc = ctk.CTkLabel(preview_scroll, text=desc_text, font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_PRIMARY, justify="left", wraplength=450)
+        lbl_desc.pack(anchor="w", pady=(0, 10))
+        
+        # Cast
+        lbl_cast_title = ctk.CTkLabel(preview_scroll, text="Besetzung (Cast)", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), text_color=ACCENT_COLOR)
+        lbl_cast_title.pack(anchor="w", pady=(5, 2))
+        
+        cast_text = preview_data.get("schauspieler_cast", "Keine Angaben.")
+        lbl_cast = ctk.CTkLabel(preview_scroll, text=cast_text, font=ctk.CTkFont(family="Segoe UI", size=11), text_color=TEXT_PRIMARY, justify="left", wraplength=450)
+        lbl_cast.pack(anchor="w", pady=(0, 15))
+        
+        # Download & Save Button
+        btn_download = ctk.CTkButton(preview_scroll, text="Film importieren & herunterladen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+                                     fg_color=ACCENT_COLOR, text_color="#000000", hover_color=ACCENT_HOVER, height=36,
+                                     command=lambda: self._import_movie(preview_data["tmdb_id"]))
+        btn_download.pack(fill="x", pady=15, padx=5)
 
     def _import_movie(self, tmdb_id: int):
         """
@@ -680,7 +851,7 @@ class AddMovieOverlay(ctk.CTkFrame):
         fsk = self.inputs["fsk"].get()
         
         if not titel:
-            messagebox.showerror("Eingabefehler", "Der Filmtitel ist ein Pflichtfeld!")
+            messagebox.showerror("Eingabehler", "Der Filmtitel ist ein Pflichtfeld!")
             return
             
         jahr = None

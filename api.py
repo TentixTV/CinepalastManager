@@ -1,6 +1,8 @@
 import os
 import json
 import requests
+import urllib.parse
+from bs4 import BeautifulSoup
 from typing import List, Dict, Optional
 
 CONFIG_FILE = "config.json"
@@ -81,16 +83,94 @@ class TMDBClient:
             })
         return results
 
-    def fetch_movie_details(self, tmdb_id: int) -> Dict:
+    def scrape_synchronsprecher(self, title: str, year: Optional[int] = None) -> str:
         """
-        Fetches full details for a movie from TMDB including credits and release dates.
-        Parses it into the SQLite schema dictionary.
+        Scrapes German voice actors for a movie title and optional release year from synchronkartei.de.
+        Fails gracefully and returns an empty string on error or if no matches exist.
+        """
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        try:
+            # 1. Search title
+            escaped_title = urllib.parse.quote(title)
+            search_url = f"https://www.synchronkartei.de/suche?q={escaped_title}"
+            response = requests.get(search_url, headers=headers, timeout=8)
+            if response.status_code != 200:
+                return ""
+                
+            soup = BeautifulSoup(response.text, "html.parser")
+            
+            # 2. Extract film links
+            film_links = []
+            for link in soup.find_all("a", href=True):
+                href = link["href"]
+                if "/film/" in href:
+                    film_links.append((link.text.strip(), href))
+                    
+            if not film_links:
+                return ""
+                
+            # 3. Find the best matching link
+            target_href = None
+            if year:
+                year_str = str(year)
+                for link_text, href in film_links:
+                    if year_str in link_text:
+                        target_href = href
+                        break
+            
+            # Fallback: use first link
+            if not target_href:
+                target_href = film_links[0][1]
+                
+            # 4. Fetch the film page
+            if not target_href.startswith("https://"):
+                film_url = f"https://www.synchronkartei.de/{target_href.lstrip('/')}"
+            else:
+                film_url = target_href
+                
+            response = requests.get(film_url, headers=headers, timeout=8)
+            if response.status_code != 200:
+                return ""
+                
+            soup = BeautifulSoup(response.text, "html.parser")
+            
+            # 5. Extract tables and rows
+            actors_info = []
+            tables = soup.find_all("table", class_="table")
+            for table in tables:
+                for row in table.find_all("tr"):
+                    cols = row.find_all("td")
+                    if len(cols) >= 3:
+                        # Columns layout: cols[0] = Actor, cols[1] = Voice Actor, cols[2] = Character/Role
+                        actor = cols[0].text.strip()
+                        voice_actor = cols[1].text.strip()
+                        character = cols[2].text.strip()
+                        
+                        if voice_actor and actor:
+                            # Clean unicode whitespaces
+                            voice_actor = " ".join(voice_actor.split())
+                            actor = " ".join(actor.split())
+                            character = " ".join(character.split())
+                            actors_info.append(f"{voice_actor} für {actor} ({character})")
+                            
+            if actors_info:
+                return ", ".join(actors_info[:12]) # limit to top 12 entries
+        except Exception as e:
+            print(f"Error scraping Deutsche Synchronkartei for '{title}': {e}")
+            
+        return ""
+
+    def fetch_movie_preview(self, tmdb_id: int) -> Dict:
+        """
+        Fetches metadata for previewing a movie without downloading image assets to disk.
+        Returns a dictionary with raw URLs for poster and banner.
         """
         api_key = self.get_api_key()
         if not api_key:
             raise ValueError("Kein TMDB API-Schlüssel konfiguriert.")
 
-        # Request details and append credits and release_dates
         url = f"{self.BASE_URL}/movie/{tmdb_id}"
         params = {
             "api_key": api_key,
@@ -102,62 +182,108 @@ class TMDBClient:
         response.raise_for_status()
         data = response.json()
 
-        # 1. Parse Title
+        # Parse fields
         titel = data.get("title", "Unbekannt")
-
-        # 2. Parse Year
         release_date = data.get("release_date", "")
         jahr = int(release_date.split("-")[0]) if release_date else None
-
-        # 3. Parse Genres
         genres_list = [g.get("name") for g in data.get("genres", []) if g.get("name")]
         genre_richtung = ", ".join(genres_list) if genres_list else "k.A."
-
-        # 4. Parse Runtime
         laufzeit = data.get("runtime", 0)
         laufzeit_min = int(laufzeit) if laufzeit else 0
-
-        # 5. Parse Plot description
-        handlung_beschreibung = data.get("overview", "")
-        if not handlung_beschreibung:
-            handlung_beschreibung = "Keine deutsche Beschreibung vorhanden."
-
-        # 6. Parse FSK (German Certification)
+        handlung_beschreibung = data.get("overview", "") or "Keine deutsche Beschreibung vorhanden."
         fsk = self._extract_fsk(data.get("release_dates", {}))
-
-        # 7. Parse Production Company / Studio
         companies = [c.get("name") for c in data.get("production_companies", []) if c.get("name")]
         produktionsfirma_studio = ", ".join(companies) if companies else "k.A."
-
-        # 8. Parse Director & Cast
+        
         credits = data.get("credits", {})
         cast = credits.get("cast", [])
         crew = credits.get("crew", [])
-
-        # Get top 10 actors
         actors = [member.get("name") for member in cast[:10] if member.get("name")]
         schauspieler_cast = ", ".join(actors) if actors else "k.A."
+        directors = [member.get("name") for member in crew if member.get("job") == "Director"]
+        regisseur = ", ".join(directors) if directors else "k.A."
+        
+        collection = data.get("belongs_to_collection")
+        filmreihe = collection.get("name") if collection else ""
+        countries = [country.get("name") for country in data.get("production_countries", []) if country.get("name")]
+        produktionsland = ", ".join(countries) if countries else "k.A."
+        
+        poster_path = data.get("poster_path")
+        banner_path = data.get("backdrop_path")
+        
+        poster_url = f"{self.IMAGE_BASE_URL}/w500{poster_path}" if poster_path else ""
+        banner_url = f"{self.IMAGE_BASE_URL}/w1280{banner_path}" if banner_path else ""
+        
+        return {
+            "titel": titel,
+            "jahr": jahr,
+            "schauspieler_cast": schauspieler_cast,
+            "genre_richtung": genre_richtung,
+            "laufzeit_min": laufzeit_min,
+            "handlung_beschreibung": handlung_beschreibung,
+            "fsk": fsk,
+            "produktionsfirma_studio": produktionsfirma_studio,
+            "regisseur": regisseur,
+            "filmreihe": filmreihe,
+            "produktionsland": produktionsland,
+            "deutsche_synchronsprecher": "",
+            "poster_url": poster_url,
+            "banner_url": banner_url,
+            "tmdb_id": tmdb_id
+        }
 
-        # Get Directors
+    def fetch_movie_details(self, tmdb_id: int) -> Dict:
+        """
+        Fetches full details for a movie from TMDB including credits, release dates,
+        downloads assets, scrapes Synchronkartei, and returns the complete DB dictionary.
+        """
+        api_key = self.get_api_key()
+        if not api_key:
+            raise ValueError("Kein TMDB API-Schlüssel konfiguriert.")
+
+        url = f"{self.BASE_URL}/movie/{tmdb_id}"
+        params = {
+            "api_key": api_key,
+            "language": "de-DE",
+            "append_to_response": "credits,release_dates"
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        titel = data.get("title", "Unbekannt")
+        release_date = data.get("release_date", "")
+        jahr = int(release_date.split("-")[0]) if release_date else None
+        genres_list = [g.get("name") for g in data.get("genres", []) if g.get("name")]
+        genre_richtung = ", ".join(genres_list) if genres_list else "k.A."
+        laufzeit = data.get("runtime", 0)
+        laufzeit_min = int(laufzeit) if laufzeit else 0
+        handlung_beschreibung = data.get("overview", "") or "Keine deutsche Beschreibung vorhanden."
+        fsk = self._extract_fsk(data.get("release_dates", {}))
+        companies = [c.get("name") for c in data.get("production_companies", []) if c.get("name")]
+        produktionsfirma_studio = ", ".join(companies) if companies else "k.A."
+
+        credits = data.get("credits", {})
+        cast = credits.get("cast", [])
+        crew = credits.get("crew", [])
+        actors = [member.get("name") for member in cast[:10] if member.get("name")]
+        schauspieler_cast = ", ".join(actors) if actors else "k.A."
         directors = [member.get("name") for member in crew if member.get("job") == "Director"]
         regisseur = ", ".join(directors) if directors else "k.A."
 
-        # 9. Parse Franchise / Collection
         collection = data.get("belongs_to_collection")
         filmreihe = collection.get("name") if collection else ""
-
-        # 10. Parse Production Country
         countries = [country.get("name") for country in data.get("production_countries", []) if country.get("name")]
         produktionsland = ", ".join(countries) if countries else "k.A."
 
-        # 11. Deutsche Synchronsprecher
-        # TMDB doesn't reliably index German dubbing cast. We leave this empty for manual input as requested.
-        deutsche_synchronsprecher = ""
+        # Scrape Synchronkartei dynamically
+        deutsche_synchronsprecher = self.scrape_synchronsprecher(titel, jahr)
 
-        # 12. Local assets path setup (download later)
         poster_path = data.get("poster_path")
         banner_path = data.get("backdrop_path")
 
+        # Download images
         poster_pfad = self.download_and_cache_image(poster_path, tmdb_id, "poster")
         banner_pfad = self.download_and_cache_image(banner_path, tmdb_id, "banner")
 
@@ -189,41 +315,31 @@ class TMDBClient:
                 for date_info in country_data.get("release_dates", []):
                     cert = date_info.get("certification", "").strip()
                     if cert:
-                        # Ensure we map TMDB values nicely. FSK values are normally numbers.
-                        # Sometimes it might return e.g. "FSK 12" instead of just "12", so we sanitize it.
                         clean_cert = cert.lower().replace("fsk", "").replace("ab", "").strip()
                         if clean_cert in ["0", "6", "12", "16", "18"]:
                             return clean_cert
-                        return cert # fallback if it is another valid certification string
+                        return cert
         return "k.A."
 
     def download_and_cache_image(self, remote_path: Optional[str], tmdb_id: int, image_type: str) -> str:
         """
         Downloads a poster or banner image from TMDB, checks if it is already cached locally,
         and saves it to assets/posters or assets/banners.
-        
-        :param remote_path: Relative TMDB image path (e.g. '/backdrop.jpg').
-        :param tmdb_id: TMDB ID of the movie to create a unique local file name.
-        :param image_type: Either 'poster' or 'banner'.
-        :return: Local relative path to the image, or empty string if not available.
         """
         if not remote_path:
             return ""
 
         extension = os.path.splitext(remote_path)[1]
         if not extension:
-            extension = ".jpg" # Default to jpg
+            extension = ".jpg"
 
         folder = "assets/posters" if image_type == "poster" else "assets/banners"
         local_filename = f"{tmdb_id}{extension}"
         local_relative_path = f"{folder}/{local_filename}"
 
-        # 1. File-check lookup (caching)
         if os.path.exists(local_relative_path) and os.path.getsize(local_relative_path) > 0:
             return local_relative_path
 
-        # 2. Download from TMDB
-        # Posters: we use w500. Banners: we use w1280.
         size = "w500" if image_type == "poster" else "w1280"
         download_url = f"{self.IMAGE_BASE_URL}/{size}{remote_path}"
 
@@ -239,3 +355,4 @@ class TMDBClient:
             print(f"Error downloading image {download_url}: {e}")
             
         return ""
+
