@@ -5,10 +5,13 @@ Urheberrecht © 2026 TENTIX. Alle Rechte vorbehalten.
 ## 1. Erlaubte Nutzung
 Es ist jedermann gestattet, den Quellcode dieses Projekts auf GitHub einzusehen, herunterzuladen, lokal zu modifizieren und für rein private, nicht-kommerzielle Zwecke zu nutzen.
 
-## 2. Striktes Verbot kommerzieller Nutzung
+## 2. Striktes Verbot kommerzieller Nutzung & API-Konformität
 Jegliche kommerzielle Nutzung, gewerblicher Vertrieb, Vermietung, Verpachtung oder der Verkauf dieser Software (sowie von Teilen des Quellcodes oder modifizierten Versionen davon) ist strengstens untersagt. 
 
 Unter kommerzieller Nutzung versteht sich jede Verwendung, die darauf abzielt, einen direkten oder indirekten wirtschaftlichen Vorteil, Gewinn oder eine finanzielle Gegenleistung zu erzielen.
+
+**WICHTIGER HINWEIS ZUR API-NUTZUNG:**
+Diese Anwendung nutzt die API von TMDB (The Movie Database). Gemäß den offiziellen Nutzungsbedingungen von TMDB ist eine kommerzielle Nutzung oder der Verkauf von Software, die auf dieser API basiert, ohne ausdrückliche Enterprise-Lizenz von TMDB strengstens untersagt. Ein Verstoß gegen diese Lizenz verletzt somit gleichzeitig die Rechte von TMDB und wird von den jeweiligen Plattformbetreibern und Urhebern verfolgt.
 
 ## 3. In-App-Zertifikate & Download-Tracking
 Zur Absicherung gegen unberechtigte Weiterverbreitung, zum Schutz des geistigen Eigentums und zur Verifizierung der legalen Nutzung implementiert die Software ein System zur In-App-Zertifizierung. 
