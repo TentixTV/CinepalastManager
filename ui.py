@@ -291,10 +291,13 @@ class SelectableLabel(tk.Text):
         try:
             d_lines = self.count("1.0", "end", "displaylines")
             if d_lines and d_lines[0] > 0:
-                self.configure(height=d_lines[0])
+                new_height = d_lines[0]
             else:
-                num_lines = int(self.index("end-1c").split(".")[0])
-                self.configure(height=num_lines)
+                new_height = int(self.index("end-1c").split(".")[0])
+            
+            # Check if height changed to break the infinite configure loop
+            if int(self.cget("height")) != new_height:
+                self.configure(height=new_height)
         except Exception:
             pass
 
