@@ -103,7 +103,8 @@ def main():
     
     # 6. Start the native webview window loop
     # On Windows, pywebview automatically loads WebView2 (Edge Chromium-based)
-    webview.start(debug=True)
+    debug_mode = "--debug" in sys.argv
+    webview.start(debug=debug_mode)
 
 if __name__ == '__main__':
     # Make sure execution directory is correct

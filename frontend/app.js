@@ -187,6 +187,18 @@ function bindEvents() {
             openModal('modal-certificate');
         });
     }
+
+    // Close modals by clicking outside the container
+    const overlays = document.querySelectorAll('.modal-overlay');
+    overlays.forEach(overlay => {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                if (overlay.id !== 'modal-alert' && overlay.id !== 'modal-confirm') {
+                    closeModal(overlay.id);
+                }
+            }
+        });
+    });
 }
 
 // --- Loading indicator ---
@@ -1289,19 +1301,7 @@ async function saveSettings(event) {
         custom_media_path: newPath
     };
     
-    if (newPath !== oldPath) {
-        const confirmed = await showCustomConfirm("Sie haben den Speicherpfad geändert. Möchten Sie alle vorhandenen Bilder (Poster & Banner) in das neue Verzeichnis kopieren?");
-        if (confirmed) {
-            showLoading("Kopiere Mediendateien...");
-            const resCopy = await pywebview.api.copy_existing_media_files(newPath);
-            hideLoading();
-            if (resCopy.success) {
-                showCustomAlert(`${resCopy.copied} Mediendateien wurden erfolgreich kopiert.`, "Kopieren abgeschlossen");
-            } else {
-                showCustomAlert("Fehler beim Kopieren der Medien: " + resCopy.error, "Kopierfehler");
-            }
-        }
-    }
+    // Do not copy existing files, only future files will be saved in the new path
     
     showLoading("Speichere Einstellungen...");
     try {
