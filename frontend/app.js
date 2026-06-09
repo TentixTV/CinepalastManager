@@ -7,7 +7,8 @@ let appState = {
     config: {},
     currentMovie: null,
     searchQuery: '',
-    searchFilter: 'Alles'
+    searchFilter: 'Alles',
+    isSearchingOnline: false
 };
 
 // --- DOM References ---
@@ -237,26 +238,43 @@ async function refreshMovies() {
 let searchDebounceTimeout;
 function performSearch() {
     clearTimeout(searchDebounceTimeout);
-    searchDebounceTimeout = setTimeout(async () => {
-        const query = appState.searchQuery.trim();
-        if (query.length > 0) {
-            showLoading("Suche...");
-            // Local search
-            appState.movies = await pywebview.api.search_movies(query, appState.searchFilter);
-            // Online search automatically
-            try {
-                appState.onlineSearchResults = await pywebview.api.search_online(query, appState.searchFilter);
-            } catch (e) {
-                console.error("Online search failed:", e);
-                appState.onlineSearchResults = [];
+    const query = appState.searchQuery.trim();
+    if (!query) {
+        appState.onlineSearchResults = [];
+        appState.isSearchingOnline = false;
+        refreshMovies();
+        return;
+    }
+    
+    // Set loading state immediately and trigger rendering to show loader
+    appState.isSearchingOnline = true;
+    appState.onlineSearchResults = [];
+    
+    // Update local results instantly
+    pywebview.api.search_movies(query, appState.searchFilter)
+        .then(localRes => {
+            if (appState.searchQuery.trim() === query) {
+                appState.movies = localRes || [];
+                renderMovies();
             }
-            hideLoading();
-        } else {
-            appState.onlineSearchResults = [];
-            await refreshMovies();
+        }).catch(err => console.error(err));
+
+    searchDebounceTimeout = setTimeout(async () => {
+        if (appState.searchQuery.trim() !== query) return;
+        
+        try {
+            const onlineRes = await pywebview.api.search_online(query, appState.searchFilter);
+            if (appState.searchQuery.trim() !== query) return;
+            appState.onlineSearchResults = onlineRes || [];
+        } catch (e) {
+            console.error("Online search error:", e);
+        } finally {
+            if (appState.searchQuery.trim() === query) {
+                appState.isSearchingOnline = false;
+                renderMovies();
+            }
         }
-        renderMovies();
-    }, 400);
+    }, 300);
 }
 
 // --- Normalize Movie Objects ---
@@ -283,197 +301,216 @@ function normalizeMovie(movie) {
     };
 }
 
-// --- Render Movie Cards & Table Rows ---
 function renderMovies() {
-    dom.movieGrid.innerHTML = '';
-    dom.movieTableBody.innerHTML = '';
-
-    const hasLocal = appState.movies.length > 0;
-    const hasOnline = appState.onlineSearchResults && appState.onlineSearchResults.length > 0;
     const isSearching = appState.searchQuery.trim().length > 0;
-
-    // Search query banner status
-    if (isSearching) {
-        const searchStatusText = `Du hast nach "${appState.searchQuery}" gesucht. Hier sind die folgenden Ergebnisse:`;
-        
+    const hasLocal = appState.movies.length > 0;
+    const hasOnline = appState.onlineSearchResults.length > 0;
+    const hasPopular = appState.popularMovies.length > 0;
+    
+    const shouldShowEmpty = !isSearching && !hasLocal && !hasPopular && !appState.isSearchingOnline;
+    
+    if (shouldShowEmpty) {
+        dom.emptyState.style.display = 'flex';
+        dom.movieGrid.style.display = 'none';
+        dom.movieTableWrapper.style.display = 'none';
+        return;
+    } else {
+        dom.emptyState.style.display = 'none';
         if (appState.viewMode === 'Galerie') {
-            const statusDiv = document.createElement('div');
-            statusDiv.className = 'search-status-text';
-            statusDiv.innerText = searchStatusText;
-            dom.movieGrid.appendChild(statusDiv);
+            dom.movieGrid.style.display = 'grid';
+            dom.movieTableWrapper.style.display = 'none';
         } else {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td colspan="8" style="padding: 10px; border-bottom: none;"><div class="search-status-text">${searchStatusText}</div></td>`;
-            dom.movieTableBody.appendChild(tr);
+            dom.movieGrid.style.display = 'none';
+            dom.movieTableWrapper.style.display = 'block';
         }
     }
-
+    
+    const filterText = appState.searchFilter === 'Alles' ? 'alles' : appState.searchFilter;
+    
     if (appState.viewMode === 'Galerie') {
-        // --- GALLERY VIEW ---
+        dom.movieGrid.innerHTML = '';
         
-        // 1. Meine Bibliothek Section
-        if (hasLocal) {
-            const header = document.createElement('div');
-            header.className = 'section-header-title';
-            header.innerText = isSearching ? 'Meine Bibliothek (Treffer)' : 'Meine Bibliothek';
-            dom.movieGrid.appendChild(header);
-            
-            appState.movies.forEach(movie => {
-                const normMovie = normalizeMovie(movie);
-                const card = createMovieCard(normMovie);
-                dom.movieGrid.appendChild(card);
-            });
-        } else if (isSearching) {
-            const header = document.createElement('div');
-            header.className = 'section-header-title';
-            header.innerText = 'Meine Bibliothek';
-            dom.movieGrid.appendChild(header);
-            
-            const emptyLabel = document.createElement('div');
-            emptyLabel.className = 'movie-card-placeholder';
-            emptyLabel.style.gridColumn = '1 / -1';
-            emptyLabel.style.height = '60px';
-            emptyLabel.style.background = 'transparent';
-            emptyLabel.style.border = 'none';
-            emptyLabel.innerHTML = '<span style="color:var(--text-muted);">Keine passenden Filme in Ihrer Bibliothek.</span>';
-            dom.movieGrid.appendChild(emptyLabel);
-        }
-        
-        // 2. Online Section / Popular Movies Section
         if (isSearching) {
-            const header = document.createElement('div');
-            header.className = 'section-header-title';
-            header.innerText = 'Online-Suchergebnisse (TMDB)';
-            dom.movieGrid.appendChild(header);
+            // Render search status banner
+            const banner = document.createElement('div');
+            banner.className = 'search-status-text';
+            banner.innerText = `Du hast nach ${filterText} "${appState.searchQuery}" gesucht, hier sind die folgenden Ergebnisse:`;
+            dom.movieGrid.appendChild(banner);
+            
+            // Local results
+            if (hasLocal) {
+                const localHeader = document.createElement('h2');
+                localHeader.className = 'section-header';
+                localHeader.innerText = 'Meine Bibliothek';
+                dom.movieGrid.appendChild(localHeader);
+                
+                appState.movies.forEach(movie => {
+                    dom.movieGrid.appendChild(createMovieCard(normalizeMovie(movie)));
+                });
+            }
+            
+            // Online results
+            const onlineHeader = document.createElement('h2');
+            onlineHeader.className = 'section-header';
+            onlineHeader.innerText = 'Online-Suchergebnisse (TMDB)';
+            dom.movieGrid.appendChild(onlineHeader);
             
             if (hasOnline) {
                 appState.onlineSearchResults.forEach(movie => {
-                    const isLocal = appState.movies.some(m => m.tmdb_id === movie.tmdb_id);
-                    const normMovie = normalizeMovie(movie);
-                    if (isLocal) {
-                        const localMovie = appState.movies.find(m => m.tmdb_id === movie.tmdb_id);
-                        normMovie.ID = localMovie.ID;
-                        normMovie.isOnline = false;
-                        normMovie.Poster_Pfad = localMovie.Poster_Pfad;
-                        normMovie.Banner_Pfad = localMovie.Banner_Pfad;
-                    }
-                    const card = createMovieCard(normMovie);
-                    dom.movieGrid.appendChild(card);
+                    dom.movieGrid.appendChild(createMovieCard(normalizeMovie(movie)));
                 });
+            } else if (appState.isSearchingOnline) {
+                const loadingCard = document.createElement('div');
+                loadingCard.className = 'movie-card';
+                loadingCard.style.pointerEvents = 'none';
+                loadingCard.innerHTML = `
+                    <div class="movie-card-img-container" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;">
+                        <div class="spinner"></div>
+                        <span style="font-size:12px;color:var(--text-secondary);">Suche auf TMDB...</span>
+                    </div>
+                `;
+                dom.movieGrid.appendChild(loadingCard);
             } else {
-                const emptyLabel = document.createElement('div');
-                emptyLabel.className = 'movie-card-placeholder';
-                emptyLabel.style.gridColumn = '1 / -1';
-                emptyLabel.style.height = '60px';
-                emptyLabel.style.background = 'transparent';
-                emptyLabel.style.border = 'none';
-                emptyLabel.innerHTML = '<span style="color:var(--text-muted);">Keine Online-Treffer gefunden.</span>';
-                dom.movieGrid.appendChild(emptyLabel);
+                const noOnline = document.createElement('div');
+                noOnline.style.gridColumn = '1 / -1';
+                noOnline.style.color = 'var(--text-muted)';
+                noOnline.style.fontSize = '13px';
+                noOnline.innerText = 'Keine Online-Treffer gefunden.';
+                dom.movieGrid.appendChild(noOnline);
             }
         } else {
-            // Show popular movies
-            const header = document.createElement('div');
-            header.className = 'section-header-title';
-            header.innerText = 'Aktuell beliebte Filme';
-            dom.movieGrid.appendChild(header);
-            
-            if (appState.popularMovies && appState.popularMovies.length > 0) {
+            // Not searching
+            if (hasLocal) {
+                const localHeader = document.createElement('h2');
+                localHeader.className = 'section-header';
+                localHeader.innerText = 'Meine Bibliothek';
+                dom.movieGrid.appendChild(localHeader);
+                
+                appState.movies.forEach(movie => {
+                    dom.movieGrid.appendChild(createMovieCard(normalizeMovie(movie)));
+                });
+                
+                const popularHeader = document.createElement('h2');
+                popularHeader.className = 'section-header';
+                popularHeader.innerText = 'Aktuell beliebte Filme';
+                dom.movieGrid.appendChild(popularHeader);
+                
                 appState.popularMovies.forEach(movie => {
-                    const isLocal = appState.movies.some(m => m.tmdb_id === movie.tmdb_id);
-                    const normMovie = normalizeMovie(movie);
-                    if (isLocal) {
-                        const localMovie = appState.movies.find(m => m.tmdb_id === movie.tmdb_id);
-                        normMovie.ID = localMovie.ID;
-                        normMovie.isOnline = false;
-                        normMovie.Poster_Pfad = localMovie.Poster_Pfad;
-                        normMovie.Banner_Pfad = localMovie.Banner_Pfad;
-                    }
-                    const card = createMovieCard(normMovie);
-                    dom.movieGrid.appendChild(card);
+                    dom.movieGrid.appendChild(createMovieCard(normalizeMovie(movie)));
                 });
             } else {
-                const emptyLabel = document.createElement('div');
-                emptyLabel.className = 'movie-card-placeholder';
-                emptyLabel.style.gridColumn = '1 / -1';
-                emptyLabel.style.height = '60px';
-                emptyLabel.style.background = 'transparent';
-                emptyLabel.style.border = 'none';
-                emptyLabel.innerHTML = '<span style="color:var(--text-muted);">Lade beliebte Filme...</span>';
-                dom.movieGrid.appendChild(emptyLabel);
+                const popularHeader = document.createElement('h2');
+                popularHeader.className = 'section-header';
+                popularHeader.innerText = 'Aktuell beliebte Filme';
+                dom.movieGrid.appendChild(popularHeader);
+                
+                appState.popularMovies.forEach(movie => {
+                    dom.movieGrid.appendChild(createMovieCard(normalizeMovie(movie)));
+                });
             }
         }
     } else {
-        // --- TABLE VIEW ---
+        // Table view
+        dom.movieTableBody.innerHTML = '';
         
-        // 1. Meine Bibliothek Section
-        if (hasLocal) {
-            const trHeader = document.createElement('tr');
-            trHeader.innerHTML = `<td colspan="8" class="table-section-header">${isSearching ? 'Meine Bibliothek (Treffer)' : 'Meine Bibliothek'}</td>`;
-            dom.movieTableBody.appendChild(trHeader);
-            
-            appState.movies.forEach(movie => {
-                const normMovie = normalizeMovie(movie);
-                const tr = createMovieRow(normMovie);
-                dom.movieTableBody.appendChild(tr);
-            });
-        } else if (isSearching) {
-            const trHeader = document.createElement('tr');
-            trHeader.innerHTML = `<td colspan="8" class="table-section-header">Meine Bibliothek</td>`;
-            dom.movieTableBody.appendChild(trHeader);
-            
-            const trEmpty = document.createElement('tr');
-            trEmpty.innerHTML = `<td colspan="8" style="text-align: center; color: var(--text-muted); padding: 15px;">Keine passenden Filme in Ihrer Bibliothek.</td>`;
-            dom.movieTableBody.appendChild(trEmpty);
-        }
-        
-        // 2. Online Section / Popular Movies Section
         if (isSearching) {
-            const trHeader = document.createElement('tr');
-            trHeader.innerHTML = `<td colspan="8" class="table-section-header">Online-Suchergebnisse (TMDB)</td>`;
-            dom.movieTableBody.appendChild(trHeader);
+            // Render search status banner as a row
+            const trBanner = document.createElement('tr');
+            trBanner.style.pointerEvents = 'none';
+            trBanner.innerHTML = `
+                <td colspan="8">
+                    <div class="search-status-text" style="margin-bottom:0;">
+                        Du hast nach ${filterText} "${appState.searchQuery}" gesucht, hier sind die folgenden Ergebnisse:
+                    </div>
+                </td>
+            `;
+            dom.movieTableBody.appendChild(trBanner);
+            
+            // Local results
+            if (hasLocal) {
+                const trHeader = document.createElement('tr');
+                trHeader.style.pointerEvents = 'none';
+                trHeader.innerHTML = `
+                    <td colspan="8" class="table-section-header">Meine Bibliothek</td>
+                `;
+                dom.movieTableBody.appendChild(trHeader);
+                
+                let localIndex = 1;
+                appState.movies.forEach(movie => {
+                    dom.movieTableBody.appendChild(createMovieRow(normalizeMovie(movie), localIndex++));
+                });
+            }
+            
+            // Online results
+            const trOnlineHeader = document.createElement('tr');
+            trOnlineHeader.style.pointerEvents = 'none';
+            trOnlineHeader.innerHTML = `
+                <td colspan="8" class="table-section-header">Online-Suchergebnisse (TMDB)</td>
+            `;
+            dom.movieTableBody.appendChild(trOnlineHeader);
             
             if (hasOnline) {
                 appState.onlineSearchResults.forEach(movie => {
-                    const isLocal = appState.movies.some(m => m.tmdb_id === movie.tmdb_id);
-                    const normMovie = normalizeMovie(movie);
-                    if (isLocal) {
-                        const localMovie = appState.movies.find(m => m.tmdb_id === movie.tmdb_id);
-                        normMovie.ID = localMovie.ID;
-                        normMovie.isOnline = false;
-                        normMovie.Poster_Pfad = localMovie.Poster_Pfad;
-                        normMovie.Banner_Pfad = localMovie.Banner_Pfad;
-                    }
-                    const tr = createMovieRow(normMovie);
-                    dom.movieTableBody.appendChild(tr);
+                    dom.movieTableBody.appendChild(createMovieRow(normalizeMovie(movie), null));
                 });
+            } else if (appState.isSearchingOnline) {
+                const trLoading = document.createElement('tr');
+                trLoading.style.pointerEvents = 'none';
+                trLoading.innerHTML = `
+                    <td colspan="8" style="text-align:center;padding:20px;">
+                        <div style="display:inline-flex;align-items:center;gap:10px;">
+                            <div class="spinner" style="width:16px;height:16px;"></div>
+                            <span style="color:var(--text-secondary);font-size:13px;">Suche auf TMDB...</span>
+                        </div>
+                    </td>
+                `;
+                dom.movieTableBody.appendChild(trLoading);
             } else {
-                const trEmpty = document.createElement('tr');
-                trEmpty.innerHTML = `<td colspan="8" style="text-align: center; color: var(--text-muted); padding: 15px;">Keine Online-Ergebnisse.</td>`;
-                dom.movieTableBody.appendChild(trEmpty);
+                const trNoOnline = document.createElement('tr');
+                trNoOnline.style.pointerEvents = 'none';
+                trNoOnline.innerHTML = `
+                    <td colspan="8" style="color:var(--text-muted);font-size:13px;padding:12px 16px;">
+                        Keine Online-Ergebnisse.
+                    </td>
+                `;
+                dom.movieTableBody.appendChild(trNoOnline);
             }
         } else {
-            const trHeader = document.createElement('tr');
-            trHeader.innerHTML = `<td colspan="8" class="table-section-header">Aktuell beliebte Filme</td>`;
-            dom.movieTableBody.appendChild(trHeader);
-            
-            if (appState.popularMovies && appState.popularMovies.length > 0) {
+            // Not searching
+            if (hasLocal) {
+                const trHeader = document.createElement('tr');
+                trHeader.style.pointerEvents = 'none';
+                trHeader.innerHTML = `
+                    <td colspan="8" class="table-section-header">Meine Bibliothek</td>
+                `;
+                dom.movieTableBody.appendChild(trHeader);
+                
+                let localIndex = 1;
+                appState.movies.forEach(movie => {
+                    dom.movieTableBody.appendChild(createMovieRow(normalizeMovie(movie), localIndex++));
+                });
+                
+                const trPopularHeader = document.createElement('tr');
+                trPopularHeader.style.pointerEvents = 'none';
+                trPopularHeader.innerHTML = `
+                    <td colspan="8" class="table-section-header">Aktuell beliebte Filme</td>
+                `;
+                dom.movieTableBody.appendChild(trPopularHeader);
+                
                 appState.popularMovies.forEach(movie => {
-                    const isLocal = appState.movies.some(m => m.tmdb_id === movie.tmdb_id);
-                    const normMovie = normalizeMovie(movie);
-                    if (isLocal) {
-                        const localMovie = appState.movies.find(m => m.tmdb_id === movie.tmdb_id);
-                        normMovie.ID = localMovie.ID;
-                        normMovie.isOnline = false;
-                        normMovie.Poster_Pfad = localMovie.Poster_Pfad;
-                        normMovie.Banner_Pfad = localMovie.Banner_Pfad;
-                    }
-                    const tr = createMovieRow(normMovie);
-                    dom.movieTableBody.appendChild(tr);
+                    dom.movieTableBody.appendChild(createMovieRow(normalizeMovie(movie), null));
                 });
             } else {
-                const trEmpty = document.createElement('tr');
-                trEmpty.innerHTML = `<td colspan="8" style="text-align: center; color: var(--text-muted); padding: 15px;">Keine beliebten Filme geladen.</td>`;
-                dom.movieTableBody.appendChild(trEmpty);
+                const trPopularHeader = document.createElement('tr');
+                trPopularHeader.style.pointerEvents = 'none';
+                trPopularHeader.innerHTML = `
+                    <td colspan="8" class="table-section-header">Aktuell beliebte Filme</td>
+                `;
+                dom.movieTableBody.appendChild(trPopularHeader);
+                
+                appState.popularMovies.forEach(movie => {
+                    dom.movieTableBody.appendChild(createMovieRow(normalizeMovie(movie), null));
+                });
             }
         }
     }
@@ -495,7 +532,8 @@ function createMovieCard(movie) {
 
     let src = '';
     if (movie.Poster_Pfad) {
-        if (movie.isOnline && !movie.Poster_Pfad.startsWith('http')) {
+        const isTmdbPath = movie.Poster_Pfad.startsWith('/') && !movie.Poster_Pfad.includes(':/') && !movie.Poster_Pfad.includes('assets/') && !movie.Poster_Pfad.startsWith('/media/');
+        if (isTmdbPath) {
             src = `https://image.tmdb.org/t/p/w342${movie.Poster_Pfad}`;
         } else {
             src = getMediaUrl(movie.Poster_Pfad);
@@ -545,7 +583,7 @@ function createMovieCard(movie) {
 }
 
 // --- Create Movie Row for Table ---
-function createMovieRow(movie) {
+function createMovieRow(movie, displayIndex) {
     const tr = document.createElement('tr');
     if (movie.isOnline) {
         tr.classList.add('online-row');
@@ -560,7 +598,7 @@ function createMovieRow(movie) {
         });
     }
 
-    const idText = movie.isOnline ? '—' : String(movie.ID).padStart(2, '0');
+    const idText = (movie.isOnline || displayIndex === null || displayIndex === undefined) ? '—' : String(displayIndex).padStart(2, '0');
     
     tr.innerHTML = `
         <td>${idText}</td>
@@ -615,20 +653,29 @@ function getMediaUrl(dbPath) {
         return dbPath;
     }
     const normalized = dbPath.replace(/\\/g, '/');
-    if (normalized.includes('/posters/')) {
-        const parts = normalized.split('/posters/');
-        return '/media/posters/' + parts[parts.length - 1];
+    const lower = normalized.toLowerCase();
+    
+    if (lower.includes('/posters/')) {
+        const idx = lower.indexOf('/posters/');
+        return '/media/posters/' + normalized.substring(idx + 9);
     }
-    if (normalized.includes('/banners/')) {
-        const parts = normalized.split('/banners/');
-        return '/media/banners/' + parts[parts.length - 1];
+    if (lower.includes('/banners/')) {
+        const idx = lower.indexOf('/banners/');
+        return '/media/banners/' + normalized.substring(idx + 9);
     }
-    if (normalized.startsWith('assets/posters/')) {
-        return '/media/posters/' + normalized.replace('assets/posters/', '');
+    
+    // Fallback patterns
+    const posterKeyword = 'posters/';
+    const bannerKeyword = 'banners/';
+    if (lower.includes(posterKeyword)) {
+        const idx = lower.indexOf(posterKeyword);
+        return '/media/posters/' + normalized.substring(idx + posterKeyword.length);
     }
-    if (normalized.startsWith('assets/banners/')) {
-        return '/media/banners/' + normalized.replace('assets/banners/', '');
+    if (lower.includes(bannerKeyword)) {
+        const idx = lower.indexOf(bannerKeyword);
+        return '/media/banners/' + normalized.substring(idx + bannerKeyword.length);
     }
+    
     return dbPath;
 }
 
@@ -662,7 +709,8 @@ function showMovieDetails(movie) {
     const bannerEl = document.getElementById('detail-banner');
     const btnDownloadBanner = document.getElementById('btn-download-banner');
     if (movie.Banner_Pfad) {
-        if (movie.isOnline && !movie.Banner_Pfad.startsWith('http')) {
+        const isTmdbPath = movie.Banner_Pfad.startsWith('/') && !movie.Banner_Pfad.includes(':/') && !movie.Banner_Pfad.includes('assets/') && !movie.Banner_Pfad.startsWith('/media/');
+        if (isTmdbPath) {
             bannerEl.src = `https://image.tmdb.org/t/p/w780${movie.Banner_Pfad}`;
         } else {
             bannerEl.src = getMediaUrl(movie.Banner_Pfad);
@@ -678,7 +726,8 @@ function showMovieDetails(movie) {
     const posterEl = document.getElementById('detail-poster');
     const btnDownloadPoster = document.getElementById('btn-download-poster');
     if (movie.Poster_Pfad) {
-        if (movie.isOnline && !movie.Poster_Pfad.startsWith('http')) {
+        const isTmdbPath = movie.Poster_Pfad.startsWith('/') && !movie.Poster_Pfad.includes(':/') && !movie.Poster_Pfad.includes('assets/') && !movie.Poster_Pfad.startsWith('/media/');
+        if (isTmdbPath) {
             posterEl.src = `https://image.tmdb.org/t/p/w342${movie.Poster_Pfad}`;
         } else {
             posterEl.src = getMediaUrl(movie.Poster_Pfad);
@@ -737,16 +786,16 @@ async function importMovie(tmdbId, movieName) {
             Jahr: details.jahr ? parseInt(details.jahr) : null,
             Regisseur: details.regisseur || null,
             Laufzeit_min: details.laufzeit_min ? parseInt(details.laufzeit_min) : null,
-            Genre: details.genre || null,
+            Genre: details.genre_richtung || details.genre || null,
             Filmreihe: details.filmreihe || null,
             FSK: details.fsk || null,
-            Produktionsfirma: details.produktionsfirma || null,
+            Produktionsfirma: details.produktionsfirma_studio || details.produktionsfirma || null,
             Produktionsland: details.produktionsland || null,
-            Beschreibung: details.beschreibung || null,
-            Schauspieler: details.schauspieler || null,
+            Beschreibung: details.handlung_beschreibung || details.beschreibung || null,
+            Schauspieler: details.schauspieler_cast || details.schauspieler || null,
             Deutsche_Synchronsprecher: details.deutsche_synchronsprecher || null,
-            Poster_Pfad: details.poster_path || null,
-            Banner_Pfad: details.backdrop_path || null
+            Poster_Pfad: details.poster_pfad || details.poster_path || null,
+            Banner_Pfad: details.banner_pfad || details.backdrop_path || null
         };
         
         const res = await pywebview.api.add_movie(movieData);
@@ -784,16 +833,16 @@ async function showOnlineMovieDetails(tmdbId, movieName) {
                 jahr: details.jahr || '',
                 regisseur: details.regisseur || '',
                 laufzeit_min: details.laufzeit_min || '',
-                genre: details.genre || '',
+                genre: details.genre_richtung || details.genre || '',
                 filmreihe: details.filmreihe || '',
                 fsk: details.fsk || '',
-                produktionsfirma: details.produktionsfirma || '',
+                produktionsfirma: details.produktionsfirma_studio || details.produktionsfirma || '',
                 produktionsland: details.produktionsland || '',
-                beschreibung: details.beschreibung || '',
-                schauspieler: details.schauspieler || '',
+                beschreibung: details.handlung_beschreibung || details.beschreibung || '',
+                schauspieler: details.schauspieler_cast || details.schauspieler || '',
                 deutsche_synchronsprecher: details.deutsche_synchronsprecher || '',
-                poster_path: details.poster_path || '',
-                backdrop_path: details.backdrop_path || ''
+                poster_path: details.poster_pfad || details.poster_path || '',
+                backdrop_path: details.banner_pfad || details.backdrop_path || ''
             });
             showMovieDetails(normalized);
         } else {

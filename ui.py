@@ -753,11 +753,6 @@ class DetailOverlay(ctk.CTkFrame):
         self.action_row = ctk.CTkFrame(self.right_col, fg_color="transparent")
         self.action_row.pack(fill="x", anchor="w", pady=10)
         
-        self.btn_edit = ctk.CTkButton(self.action_row, text="Bearbeiten", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-                                      fg_color="transparent", text_color=TEXT_PRIMARY, border_color=CARD_BORDER, border_width=1,
-                                      hover_color="#2A2A35", width=120, height=35, command=self._edit_clicked)
-        self.btn_edit.pack(side="left", padx=(0, 10))
-        
         self.btn_delete = ctk.CTkButton(self.action_row, text="Löschen", font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
                                         fg_color="#ef4444", text_color="#FFFFFF", hover_color="#dc2626", width=120, height=35, command=self._delete_clicked)
         self.btn_delete.pack(side="left")
@@ -772,9 +767,6 @@ class DetailOverlay(ctk.CTkFrame):
         lbl_field.pack(side="left", anchor="n")
         lbl_val = SelectableLabel(row, text=val, font=ctk.CTkFont(family="Segoe UI", size=11), fg_color=TEXT_PRIMARY, bg_color="#181822")
         lbl_val.pack(side="left", fill="x", expand=True, anchor="n")
-
-    def _edit_clicked(self):
-        self.on_edit_callback(self.movie)
         
     def _delete_clicked(self):
         if messagebox.askyesno("Löschen bestätigen", f"Möchten Sie den Film '{self.movie.get('titel')}' wirklich aus der Bibliothek löschen?"):
