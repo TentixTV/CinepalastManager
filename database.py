@@ -62,10 +62,10 @@ def add_movie(data_dict: dict, db_file=DB_FILE) -> int:
         conn.close()
     return last_id
 
-def search_movies_realtime(search_query: str, db_file=DB_FILE) -> list:
+def search_movies_realtime(search_query: str, search_filter: str = "Alles", db_file=DB_FILE) -> list:
     """
     Searches the database in real-time for movies matching the search string.
-    Checks Name, Schauspieler, Genre, Regisseur, and Filmreihe.
+    Supports filters: Alles, Film, Schauspieler, Regisseur.
     Returns a list of dictionaries representing the matching movies.
     """
     if not search_query.strip():
@@ -75,18 +75,42 @@ def search_movies_realtime(search_query: str, db_file=DB_FILE) -> list:
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
-    sql = """
-    SELECT * FROM media
-    WHERE Name LIKE ?
-       OR Schauspieler LIKE ?
-       OR Genre LIKE ?
-       OR Regisseur LIKE ?
-       OR Filmreihe LIKE ?
-    ORDER BY Name ASC;
-    """
     like_query = f"%{search_query}%"
-    params = (like_query, like_query, like_query, like_query, like_query)
     
+    if search_filter == "Film":
+        sql = """
+        SELECT * FROM media
+        WHERE Name LIKE ?
+           OR Filmreihe LIKE ?
+        ORDER BY Name ASC;
+        """
+        params = (like_query, like_query)
+    elif search_filter == "Schauspieler":
+        sql = """
+        SELECT * FROM media
+        WHERE Schauspieler LIKE ?
+        ORDER BY Name ASC;
+        """
+        params = (like_query,)
+    elif search_filter == "Regisseur":
+        sql = """
+        SELECT * FROM media
+        WHERE Regisseur LIKE ?
+        ORDER BY Name ASC;
+        """
+        params = (like_query,)
+    else: # "Alles"
+        sql = """
+        SELECT * FROM media
+        WHERE Name LIKE ?
+           OR Schauspieler LIKE ?
+           OR Genre LIKE ?
+           OR Regisseur LIKE ?
+           OR Filmreihe LIKE ?
+        ORDER BY Name ASC;
+        """
+        params = (like_query, like_query, like_query, like_query, like_query)
+        
     cursor.execute(sql, params)
     rows = cursor.fetchall()
     results = [dict(row) for row in rows]
@@ -215,8 +239,8 @@ class DatabaseManager:
         db_data = self._ui_to_db(movie_dict)
         return add_movie(db_data, self.db_path)
 
-    def search_movies(self, query: str) -> list:
-        results = search_movies_realtime(query, self.db_path)
+    def search_movies(self, query: str, search_filter: str = "Alles") -> list:
+        results = search_movies_realtime(query, search_filter, self.db_path)
         return [self._db_to_ui(row) for row in results]
 
     def get_all_movies(self) -> list:

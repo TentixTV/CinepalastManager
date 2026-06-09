@@ -93,43 +93,80 @@ class TMDBClient:
         except Exception:
             return False
 
-    def search_movies(self, query: str) -> List[Dict]:
+    def search_movies(self, query: str, search_filter: str = "Alles") -> List[Dict]:
         """
-        Searches TMDB for movies by title query.
+        Searches TMDB for movies by title query, supporting actor and director filters.
         Uses TMDB API key if configured; otherwise, scrapes TMDB public search website.
         """
         api_key = self.get_api_key()
         if api_key:
             try:
-                url = f"{self.BASE_URL}/search/movie"
-                headers, params = self._get_auth(api_key)
-                params.update({
-                    "query": query,
-                    "language": "de-DE",
-                    "page": 1
-                })
-                response = requests.get(url, headers=headers, params=params, timeout=10)
-                response.raise_for_status()
-                data = response.json()
-                
-                results = []
-                for item in data.get("results", []):
-                    release_date = item.get("release_date", "")
-                    year = release_date.split("-")[0] if release_date else "k.A."
-                    results.append({
-                        "tmdb_id": item["id"],
-                        "titel": item["title"],
-                        "original_titel": item.get("original_title", ""),
-                        "jahr": year,
-                        "poster_path": item.get("poster_path")
+                if search_filter in ["Schauspieler", "Regisseur"]:
+                    url = f"{self.BASE_URL}/search/person"
+                    headers, params = self._get_auth(api_key)
+                    params.update({
+                        "query": query,
+                        "language": "de-DE",
+                        "page": 1
                     })
-                return results
+                    response = requests.get(url, headers=headers, params=params, timeout=10)
+                    response.raise_for_status()
+                    data = response.json()
+                    
+                    results = []
+                    for person in data.get("results", []):
+                        for item in person.get("known_for", []):
+                            if item.get("media_type") == "movie":
+                                release_date = item.get("release_date", "")
+                                year = release_date.split("-")[0] if release_date else "k.A."
+                                results.append({
+                                    "tmdb_id": item["id"],
+                                    "titel": item.get("title") or item.get("name") or "k.A.",
+                                    "original_titel": item.get("original_title", ""),
+                                    "jahr": year,
+                                    "poster_path": item.get("poster_path")
+                                })
+                    # De-duplicate results
+                    seen = set()
+                    unique_results = []
+                    for r in results:
+                        if r["tmdb_id"] not in seen:
+                            seen.add(r["tmdb_id"])
+                            unique_results.append(r)
+                    return unique_results
+                else:
+                    url = f"{self.BASE_URL}/search/movie"
+                    headers, params = self._get_auth(api_key)
+                    params.update({
+                        "query": query,
+                        "language": "de-DE",
+                        "page": 1
+                    })
+                    response = requests.get(url, headers=headers, params=params, timeout=10)
+                    response.raise_for_status()
+                    data = response.json()
+                    
+                    results = []
+                    for item in data.get("results", []):
+                        release_date = item.get("release_date", "")
+                        year = release_date.split("-")[0] if release_date else "k.A."
+                        results.append({
+                            "tmdb_id": item["id"],
+                            "titel": item["title"],
+                            "original_titel": item.get("original_title", ""),
+                            "jahr": year,
+                            "poster_path": item.get("poster_path")
+                        })
+                    return results
             except Exception as e:
                 print(f"API search failed (falling back to web scraping): {e}")
 
         # Web Scraper Fallback (no API Key required)
         escaped_query = urllib.parse.quote(query)
-        url = f"https://www.themoviedb.org/search?query={escaped_query}"
+        if search_filter in ["Schauspieler", "Regisseur"]:
+            url = f"https://www.themoviedb.org/search/person?query={escaped_query}"
+        else:
+            url = f"https://www.themoviedb.org/search?query={escaped_query}"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
@@ -585,7 +622,7 @@ class TMDBClient:
     def download_and_cache_image(self, remote_path: Optional[str], tmdb_id: int, image_type: str) -> str:
         """
         Downloads a poster or banner image from TMDB, checks if it is already cached locally,
-        and saves it to assets/posters or assets/banners.
+        and saves it to the custom media directory if configured, or default folders.
         """
         if not remote_path:
             return ""
@@ -594,24 +631,32 @@ class TMDBClient:
         if not extension:
             extension = ".jpg"
 
-        folder = "assets/posters" if image_type == "poster" else "assets/banners"
-        local_filename = f"{tmdb_id}{extension}"
-        local_relative_path = f"{folder}/{local_filename}"
+        # Check if there is a custom media path
+        custom_path = load_config().get("custom_media_path", "").strip()
+        if custom_path and os.path.isdir(custom_path):
+            folder = os.path.join(custom_path, "posters" if image_type == "poster" else "banners")
+            os.makedirs(folder, exist_ok=True)
+            local_filename = f"{tmdb_id}{extension}"
+            local_path = os.path.join(folder, local_filename)
+        else:
+            folder = "assets/posters" if image_type == "poster" else "assets/banners"
+            os.makedirs(folder, exist_ok=True)
+            local_filename = f"{tmdb_id}{extension}"
+            local_path = f"{folder}/{local_filename}"
 
-        if os.path.exists(local_relative_path) and os.path.getsize(local_relative_path) > 0:
-            return local_relative_path
+        if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+            return local_path
 
         size = "w500" if image_type == "poster" else "w1280"
         download_url = f"{self.IMAGE_BASE_URL}/{size}{remote_path}"
 
         try:
-            os.makedirs(folder, exist_ok=True)
             response = requests.get(download_url, stream=True, timeout=15)
             if response.status_code == 200:
-                with open(local_relative_path, "wb") as f:
+                with open(local_path, "wb") as f:
                     for chunk in response.iter_content(1024):
                         f.write(chunk)
-                return local_relative_path
+                return local_path
         except Exception as e:
             print(f"Error downloading image {download_url}: {e}")
             

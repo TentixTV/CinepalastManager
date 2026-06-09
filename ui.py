@@ -222,11 +222,46 @@ def create_placeholder_image(size: tuple, title: str, img_type: str) -> Image.Im
 
 IMAGE_CACHE = {}
 
+def resolve_image_path(path: Optional[str]) -> Optional[str]:
+    """Resolves an image path to the custom media directory if configured and the file exists there."""
+    if not path:
+        return path
+    if os.path.isabs(path) and os.path.exists(path):
+        return path
+        
+    from api import load_config
+    custom_path = load_config().get("custom_media_path", "").strip()
+    if custom_path and os.path.isdir(custom_path):
+        filename = os.path.basename(path)
+        if "posters" in path:
+            resolved = os.path.join(custom_path, "posters", filename)
+            if os.path.exists(resolved):
+                return resolved
+        elif "banners" in path:
+            resolved = os.path.join(custom_path, "banners", filename)
+            if os.path.exists(resolved):
+                return resolved
+    return path
+
+
+def get_destination_media_path(filename: str, img_type: str) -> str:
+    """Returns the destination path for copying a manually added image, respecting custom media path settings."""
+    from api import load_config
+    custom_path = load_config().get("custom_media_path", "").strip()
+    if custom_path and os.path.isdir(custom_path):
+        folder = os.path.join(custom_path, "posters" if img_type == "poster" else "banners")
+    else:
+        folder = "assets/posters" if img_type == "poster" else "assets/banners"
+    os.makedirs(folder, exist_ok=True)
+    return os.path.join(folder, filename)
+
+
 def get_ctk_image(path: Optional[str], size: tuple, title: str, img_type: str) -> ctk.CTkImage:
     """
     Loads an image from the disk or falls back to a generated placeholder, caching results.
     Wraps it in a CTkImage for high-DPI scaling.
     """
+    path = resolve_image_path(path)
     cache_key = (path, size)
     if path and cache_key in IMAGE_CACHE:
         return IMAGE_CACHE[cache_key]
@@ -1010,6 +1045,28 @@ class SettingsOverlay(ctk.CTkFrame):
         current_view = load_config().get("default_view", "Galerie")
         self.view_option.set(current_view)
         
+        # Speicherpfad Input Stack
+        self.path_frame = ctk.CTkFrame(self.container, fg_color="transparent")
+        self.path_frame.pack(fill="x", padx=40, pady=4)
+        
+        self.lbl_path = ctk.CTkLabel(self.path_frame, text="Poster & Banner Speicherpfad (Standard: AppData)", 
+                                     font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color=TEXT_PRIMARY)
+        self.lbl_path.pack(anchor="w", pady=(0, 2))
+        
+        self.path_input_row = ctk.CTkFrame(self.path_frame, fg_color="transparent")
+        self.path_input_row.pack(fill="x")
+        
+        self.entry_custom_path = ctk.CTkEntry(self.path_input_row, fg_color="#121218", border_color=CARD_BORDER, text_color=TEXT_PRIMARY, height=32, corner_radius=8)
+        self.entry_custom_path.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        
+        custom_path_val = load_config().get("custom_media_path", "").strip()
+        self.entry_custom_path.insert(0, custom_path_val)
+        
+        self.btn_browse_path = ctk.CTkButton(self.path_input_row, text="Durchsuchen", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                                             fg_color="transparent", text_color=TEXT_PRIMARY, border_color=ACCENT_COLOR, border_width=1,
+                                             hover_color=GLOW_HOVER, height=32, width=90, corner_radius=8, command=self._browse_custom_path)
+        self.btn_browse_path.pack(side="left")
+        
         # --- SECTION 3: DATENBANK-VERWALTUNG ---
         self.lbl_sec_db = ctk.CTkLabel(self.container, text="LOKALE FILMDATENBANK", 
                                        font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"), text_color=TEXT_SECONDARY)
@@ -1066,6 +1123,13 @@ class SettingsOverlay(ctk.CTkFrame):
         
         # Apply current theme colors live on load
         self._update_theme_colors(current_theme_display)
+
+    def _browse_custom_path(self):
+        from tkinter import filedialog
+        selected = filedialog.askdirectory(parent=self, title="Speicherpfad für Poster & Banner auswählen")
+        if selected:
+            self.entry_custom_path.delete(0, tk.END)
+            self.entry_custom_path.insert(0, selected)
 
     def _update_theme_colors(self, choice):
         """Dynamically updates the settings elements accent colors live based on dropdown selection."""
@@ -1166,6 +1230,7 @@ class SettingsOverlay(ctk.CTkFrame):
     def _save_key(self):
         new_key = self.entry_key.get().strip()
         new_github = self.entry_github.get().strip()
+        new_custom_path = self.entry_custom_path.get().strip()
         
         from api import save_api_key, save_github_token, load_config, save_config
         save_api_key(new_key)
@@ -1177,6 +1242,66 @@ class SettingsOverlay(ctk.CTkFrame):
         selected_view = self.view_option.get()
         
         config = load_config()
+        old_custom_path = config.get("custom_media_path", "").strip()
+        
+        # If new path is entered, validate it (or create it)
+        if new_custom_path:
+            try:
+                os.makedirs(new_custom_path, exist_ok=True)
+            except Exception as e:
+                from tkinter import messagebox
+                messagebox.showerror("Fehler", f"Fehler beim Erstellen des Speicherpfads:\n{str(e)}")
+                return
+                
+        if new_custom_path != old_custom_path:
+            import shutil
+            from tkinter import messagebox
+            
+            # Prompt user
+            copy_files = messagebox.askyesno(
+                "Medien kopieren",
+                "Sie haben den Speicherpfad geändert. Möchten Sie alle vorhandenen Bilder (Poster & Banner) in das neue Verzeichnis kopieren?"
+            )
+            
+            if copy_files:
+                # Source directories
+                src_dirs = []
+                if old_custom_path and os.path.isdir(old_custom_path):
+                    src_dirs.append((os.path.join(old_custom_path, "posters"), "poster"))
+                    src_dirs.append((os.path.join(old_custom_path, "banners"), "banner"))
+                
+                # Always check default assets
+                src_dirs.append(("assets/posters", "poster"))
+                src_dirs.append(("assets/banners", "banner"))
+                
+                copied_count = 0
+                # We temporarily save the new path in config so get_destination_media_path uses it
+                config["custom_media_path"] = new_custom_path
+                save_config(config)
+                
+                for src_dir, img_type in src_dirs:
+                    if os.path.isdir(src_dir):
+                        for item in os.listdir(src_dir):
+                            src_file = os.path.join(src_dir, item)
+                            if os.path.isfile(src_file):
+                                dest_file = get_destination_media_path(item, img_type)
+                                try:
+                                    # Don't overwrite if same file path
+                                    if os.path.abspath(src_file) != os.path.abspath(dest_file):
+                                        shutil.copy2(src_file, dest_file)
+                                        copied_count += 1
+                                except Exception as e:
+                                    print(f"Error copying {src_file} to {dest_file}: {e}")
+                
+                if copied_count > 0:
+                    messagebox.showinfo("Kopieren abgeschlossen", f"{copied_count} Mediendateien wurden erfolgreich kopiert.")
+            else:
+                config["custom_media_path"] = new_custom_path
+                save_config(config)
+        else:
+            config["custom_media_path"] = new_custom_path
+            save_config(config)
+            
         config["theme"] = selected_theme
         config["default_view"] = selected_view
         save_config(config)
@@ -1684,24 +1809,22 @@ class AddMovieOverlay(ctk.CTkFrame):
         poster_dest = ""
         banner_dest = ""
         
-        # Safe copy to assets/posters/
+        # Safe copy to custom posters/banners path if set
         if poster_src and os.path.exists(poster_src):
             ext = os.path.splitext(poster_src)[1] or ".jpg"
             unique_name = f"manual_{uuid.uuid4().hex[:12]}{ext}"
-            os.makedirs("assets/posters", exist_ok=True)
-            poster_dest = f"assets/posters/{unique_name}"
+            poster_dest = get_destination_media_path(unique_name, "poster")
             try:
                 shutil.copy2(poster_src, poster_dest)
             except Exception as e:
                 print(f"Error copying poster: {e}")
                 poster_dest = ""
                 
-        # Safe copy to assets/banners/
+        # Safe copy to custom posters/banners path if set
         if banner_src and os.path.exists(banner_src):
             ext = os.path.splitext(banner_src)[1] or ".jpg"
             unique_name = f"manual_{uuid.uuid4().hex[:12]}{ext}"
-            os.makedirs("assets/banners", exist_ok=True)
-            banner_dest = f"assets/banners/{unique_name}"
+            banner_dest = get_destination_media_path(unique_name, "banner")
             try:
                 shutil.copy2(banner_src, banner_dest)
             except Exception as e:
@@ -1873,8 +1996,7 @@ class EditMovieOverlay(ctk.CTkFrame):
         if poster_src != self.movie.get("poster_pfad", "") and poster_src and os.path.exists(poster_src):
             ext = os.path.splitext(poster_src)[1] or ".jpg"
             unique_name = f"manual_{uuid.uuid4().hex[:12]}{ext}"
-            os.makedirs("assets/posters", exist_ok=True)
-            poster_dest = f"assets/posters/{unique_name}"
+            poster_dest = get_destination_media_path(unique_name, "poster")
             try:
                 shutil.copy2(poster_src, poster_dest)
             except Exception as e:
@@ -1885,8 +2007,7 @@ class EditMovieOverlay(ctk.CTkFrame):
         if banner_src != self.movie.get("banner_pfad", "") and banner_src and os.path.exists(banner_src):
             ext = os.path.splitext(banner_src)[1] or ".jpg"
             unique_name = f"manual_{uuid.uuid4().hex[:12]}{ext}"
-            os.makedirs("assets/banners", exist_ok=True)
-            banner_dest = f"assets/banners/{unique_name}"
+            banner_dest = get_destination_media_path(unique_name, "banner")
             try:
                 shutil.copy2(banner_src, banner_dest)
             except Exception as e:
@@ -2122,20 +2243,33 @@ class CinePalastApp(ctk.CTk):
         self.search_frame = ctk.CTkFrame(self.top_panel, fg_color="transparent")
         self.search_frame.pack(side="left", fill="x", expand=True, padx=40, pady=15)
         
+        self.search_filter = ctk.CTkOptionMenu(self.search_frame, values=["Alles", "Film", "Schauspieler", "Regisseur"],
+                                              fg_color="#1E1E26", button_color=ACCENT_COLOR, button_hover_color=ACCENT_HOVER,
+                                              dropdown_fg_color="#1E1E26", dropdown_text_color=TEXT_PRIMARY,
+                                              dropdown_hover_color="#2A2A35", text_color=TEXT_PRIMARY,
+                                              corner_radius=8, height=32, width=120, command=self._on_filter_changed)
+        self.search_filter.pack(side="left", padx=(0, 10))
+        self.search_filter.set("Alles")
+
         self.entry_main_search = ctk.CTkEntry(self.search_frame, placeholder_text="Bibliothek sekundenschnell durchsuchen...", fg_color="#1E1E26", border_color=CARD_BORDER)
-        self.entry_main_search.pack(fill="x", expand=True)
+        self.entry_main_search.pack(side="left", fill="x", expand=True)
         self.entry_main_search.bind("<KeyRelease>", self._on_search_key)
         
         # Bind Tooltips
-        CTkToolTip(self.entry_main_search, "Durchsuche deine lokale Film-Bibliothek nach Titel, Genre, Cast oder Regisseur.")
+        CTkToolTip(self.entry_main_search, "Durchsuche deine lokale Film-Bibliothek nach dem ausgewählten Filter.")
         CTkToolTip(self.btn_add, "Füge neue Filme online via TMDB oder manuell hinzu.")
         CTkToolTip(self.btn_settings, "Öffne die Einstellungen für den TMDB API-Key und das Design.")
+
+    def _on_filter_changed(self, choice):
+        """Triggers search query refresh when filter choice changes."""
+        self.refresh_gallery()
 
     # --- GALLERY RENDERING & REFLOW ---
     def refresh_gallery(self):
         """Loads films from DB matching search query, and schedules a grid or table refresh."""
         query = self.entry_main_search.get().strip()
-        self.movies_list = self.db_manager.search_movies(query)
+        search_filter = self.search_filter.get()
+        self.movies_list = self.db_manager.search_movies(query, search_filter)
         if self.view_mode == "Galerie":
             self._regrid_movies()
         else:
@@ -2246,10 +2380,11 @@ class CinePalastApp(ctk.CTk):
             
         def execute_search():
             self.refresh_gallery()
-            local_matches = self.db_manager.search_movies(query)
+            search_filter = self.search_filter.get()
+            local_matches = self.db_manager.search_movies(query, search_filter)
             self._show_suggestions(local_matches)
             if len(query) >= 2:
-                self._perform_main_online_search(query)
+                self._perform_main_online_search(query, search_filter)
             else:
                 self.online_movies_list = []
                 self._regrid_movies()
@@ -2257,10 +2392,10 @@ class CinePalastApp(ctk.CTk):
         self._main_search_timer = self.after(250, execute_search)
 
 
-    def _perform_main_online_search(self, query):
+    def _perform_main_online_search(self, query, search_filter="Alles"):
         def thread_func():
             try:
-                results = self.tmdb_client.search_movies(query)
+                results = self.tmdb_client.search_movies(query, search_filter)
                 # Filter out movies already in local database (by title)
                 local_titles = {m["titel"].lower() for m in self.db_manager.get_all_movies()}
                 filtered_results = []
