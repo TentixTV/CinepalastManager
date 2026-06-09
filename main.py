@@ -92,6 +92,31 @@ def main():
     Main application entry point.
     Initializes local SQLite database, sets up TMDB client, and runs the CustomTkinter app.
     """
+    import sys
+    if "--web" in sys.argv or os.environ.get("CINEPALAST_WEB") == "1":
+        port = 8080
+        if "--port" in sys.argv:
+            try:
+                idx = sys.argv.index("--port")
+                port = int(sys.argv[idx + 1])
+            except Exception:
+                pass
+        elif "CINEPALAST_PORT" in os.environ:
+            try:
+                port = int(os.environ["CINEPALAST_PORT"])
+            except Exception:
+                pass
+                
+        import database
+        import api
+        import server
+        
+        database.initialize_db()
+        api.load_config()
+        
+        server.run_server(port)
+        sys.exit(0)
+
     ensure_ico_exists()
     ensure_fsk_icons()
     try:
