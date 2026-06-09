@@ -31,7 +31,12 @@ static int callback(void* data, int argc, char** argv, char** azColName) {
 }
 
 int main(int argc, char* argv[]) {
-    std::string dbPath = (argc > 1) ? argv[1] : "../CinePalast/cinepalast.db";
+    if (argc < 2) {
+        std::cout << "Fehler: dbPath ist erforderlich.\n";
+        std::cout << "Verwendung: CinePalastClient <dbPath> [query] [filter]\n";
+        return 1;
+    }
+    std::string dbPath = argv[1];
     std::string searchQuery = (argc > 2) ? argv[2] : "";
     std::string searchFilter = (argc > 3) ? argv[3] : "Alles";
 

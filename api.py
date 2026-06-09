@@ -807,10 +807,14 @@ class TMDBClient:
             local_filename = f"{tmdb_id}{extension}"
             local_path = os.path.join(folder, local_filename)
         else:
-            folder = "assets/posters" if image_type == "poster" else "assets/banners"
+            local_appdata = os.environ.get("LOCALAPPDATA")
+            if local_appdata:
+                folder = os.path.join(local_appdata, "CinePalast Manager", "assets", "posters" if image_type == "poster" else "banners")
+            else:
+                folder = os.path.join(get_app_dir(), "assets", "posters" if image_type == "poster" else "banners")
             os.makedirs(folder, exist_ok=True)
             local_filename = f"{tmdb_id}{extension}"
-            local_path = f"{folder}/{local_filename}"
+            local_path = os.path.join(folder, local_filename)
 
         if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
             return local_path

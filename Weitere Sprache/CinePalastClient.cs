@@ -55,23 +55,23 @@ namespace CinePalast
                 }
                 else if (filter == "Film")
                 {
-                    sql = "SELECT * FROM media WHERE Name LIKE $query OR Filmreihe LIKE $query ORDER BY Name ASC;";
-                    command.Parameters.AddWithValue("$query", likeQuery);
+                    sql = "SELECT * FROM media WHERE Name LIKE @query OR Filmreihe LIKE @query ORDER BY Name ASC;";
+                    command.Parameters.AddWithValue("@query", likeQuery);
                 }
                 else if (filter == "Schauspieler")
                 {
-                    sql = "SELECT * FROM media WHERE Schauspieler LIKE $query ORDER BY Name ASC;";
-                    command.Parameters.AddWithValue("$query", likeQuery);
+                    sql = "SELECT * FROM media WHERE Schauspieler LIKE @query ORDER BY Name ASC;";
+                    command.Parameters.AddWithValue("@query", likeQuery);
                 }
                 else if (filter == "Regisseur")
                 {
-                    sql = "SELECT * FROM media WHERE Regisseur LIKE $query ORDER BY Name ASC;";
-                    command.Parameters.AddWithValue("$query", likeQuery);
+                    sql = "SELECT * FROM media WHERE Regisseur LIKE @query ORDER BY Name ASC;";
+                    command.Parameters.AddWithValue("@query", likeQuery);
                 }
                 else
                 {
-                    sql = "SELECT * FROM media WHERE Name LIKE $query OR Schauspieler LIKE $query OR Genre LIKE $query OR Regisseur LIKE $query OR Filmreihe LIKE $query ORDER BY Name ASC;";
-                    command.Parameters.AddWithValue("$query", likeQuery);
+                    sql = "SELECT * FROM media WHERE Name LIKE @query OR Schauspieler LIKE @query OR Genre LIKE @query OR Regisseur LIKE @query OR Filmreihe LIKE @query ORDER BY Name ASC;";
+                    command.Parameters.AddWithValue("@query", likeQuery);
                 }
 
                 command.CommandText = sql;
@@ -108,7 +108,13 @@ namespace CinePalast
 
         public static void Main(string[] args)
         {
-            string dbPath = args.Length > 0 ? args[0] : "../CinePalast/cinepalast.db";
+            if (args.Length < 1)
+            {
+                Console.WriteLine("Fehler: dbPath ist erforderlich.");
+                Console.WriteLine("Verwendung: CinePalastClient <dbPath> [query] [filter]");
+                return;
+            }
+            string dbPath = args[0];
             string searchQuery = args.Length > 1 ? args[1] : string.Empty;
             string searchFilter = args.Length > 2 ? args[2] : "Alles";
             

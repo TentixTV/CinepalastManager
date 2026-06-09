@@ -45,7 +45,7 @@ class CinePalastAPI:
 
     def get_movie_details(self, tmdb_id: int) -> Dict:
         try:
-            return self.tmdb_client.get_movie_details(tmdb_id)
+            return self.tmdb_client.fetch_movie_details(tmdb_id)
         except Exception as e:
             print("Error get_movie_details:", e)
             return {}
@@ -142,6 +142,11 @@ class CinePalastAPI:
                 src_dirs.append((os.path.join(old_path, "posters"), "posters"))
                 src_dirs.append((os.path.join(old_path, "banners"), "banners"))
             
+            local_appdata = os.environ.get("LOCALAPPDATA")
+            if local_appdata:
+                src_dirs.append((os.path.join(local_appdata, "CinePalast Manager", "assets", "posters"), "posters"))
+                src_dirs.append((os.path.join(local_appdata, "CinePalast Manager", "assets", "banners"), "banners"))
+                
             src_dirs.append((os.path.join(self.get_app_dir(), "assets", "posters"), "posters"))
             src_dirs.append((os.path.join(self.get_app_dir(), "assets", "banners"), "banners"))
             
@@ -155,8 +160,9 @@ class CinePalastAPI:
                         if os.path.isfile(src_file):
                             dest_file = os.path.join(dest_dir, item)
                             if os.path.abspath(src_file) != os.path.abspath(dest_file):
-                                shutil.copy2(src_file, dest_file)
-                                copied += 1
+                                if not os.path.exists(dest_file):
+                                    shutil.copy2(src_file, dest_file)
+                                    copied += 1
                                 
             return {"success": True, "copied": copied}
         except Exception as e:

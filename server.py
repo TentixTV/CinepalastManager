@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import bottle
 import api
 
@@ -30,29 +31,11 @@ def serve_banner(filename):
             return bottle.static_file(filename, root=folder)
     return bottle.static_file(filename, root=os.path.join(get_app_dir(), "assets/banners"))
 
-@bottle.route('/<path:path>')
-def serve_static(path):
-    root_dir = os.path.dirname(os.path.abspath(__file__))
-    frontend_dir = os.path.join(root_dir, "frontend")
-    if not os.path.isdir(frontend_dir):
-        # PyInstaller temp directory fallback
-        if hasattr(sys, '_MEIPASS'):
-            frontend_dir = os.path.join(sys._MEIPASS, "frontend")
-            
-    return bottle.static_file(path, root=frontend_dir)
 
-@bottle.route('/')
-def serve_index():
-    root_dir = os.path.dirname(os.path.abspath(__file__))
-    frontend_dir = os.path.join(root_dir, "frontend")
-    if not os.path.isdir(frontend_dir):
-        if hasattr(sys, '_MEIPASS'):
-            frontend_dir = os.path.join(sys._MEIPASS, "frontend")
-            
-    return bottle.static_file("index.html", root=frontend_dir)
 
 def run_server(port):
-    bottle.run(host='127.0.0.1', port=port, quiet=True)
+    bottle.debug(True)
+    bottle.run(host='127.0.0.1', port=port, quiet=False)
 
 # --- REST API Endpoints for Test Verification (Tiers 1-4) ---
 
@@ -72,6 +55,9 @@ def api_shutdown():
 
 @bottle.get('/api/search')
 def api_search():
+    import json
+    bottle.response.content_type = 'application/json'
+    
     query = bottle.request.query.get('query', '').strip()
     search_filter = bottle.request.query.get('filter', 'Alles').strip()
     network_status = bottle.request.query.get('network_status', '').strip()
@@ -80,24 +66,24 @@ def api_search():
         network_status = bottle.request.query.get('network', '').strip()
     
     if not query:
-        return []
+        return "[]"
         
     import database
     local_results = database.search_movies_realtime(query, search_filter)
     
     if network_status == 'offline':
-        return local_results
+        return json.dumps(local_results)
         
     if local_results:
-        return local_results
+        return json.dumps(local_results)
         
     try:
         import api
         client = api.TMDBClient()
         online_results = client.search_movies(query, search_filter)
-        return online_results
+        return json.dumps(online_results)
     except Exception:
-        return local_results
+        return json.dumps(local_results)
 
 @bottle.post('/api/settings')
 def api_settings():
@@ -207,7 +193,7 @@ def api_import():
             
         import api
         client = api.TMDBClient()
-        details = client.get_movie_details(tmdb_id)
+        details = client.fetch_movie_details(tmdb_id)
         
         if not details:
             return {"success": False, "error": "Movie not found"}
@@ -226,8 +212,8 @@ def api_import():
             "Beschreibung": details.get("beschreibung"),
             "Schauspieler": details.get("schauspieler"),
             "Deutsche_Synchronsprecher": details.get("deutsche_synchronsprecher"),
-            "Poster_Pfad": details.get("poster_path"),
-            "Banner_Pfad": details.get("backdrop_path")
+            "Poster_Pfad": details.get("poster_pfad") or details.get("poster_path"),
+            "Banner_Pfad": details.get("banner_pfad") or details.get("backdrop_path")
         }
         
         import backend_api
@@ -257,7 +243,12 @@ def api_credits():
     creator = version_data.get("creator", "®TENTIX LLC")
     founder = version_data.get("founder", "Martin K.")
     version = version_data.get("version", "1.0.0")
-    display_string = f"Creator: {creator}, Founder: {founder}, Version: {version}"
+    
+    import html
+    escaped_creator = html.escape(creator)
+    escaped_founder = html.escape(founder)
+    escaped_version = html.escape(version)
+    display_string = f"Creator: {escaped_creator}, Founder: {escaped_founder}, Version: {escaped_version}"
     
     return {
         "creator": creator,
@@ -293,7 +284,11 @@ def api_media_details(tmdb_id):
     conn = sqlite3.connect(database.DB_FILE)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM media WHERE tmdb_id = ?;", (tmdb_id,))
+    cursor.execute("""
+        SELECT * FROM media 
+        WHERE Poster_Pfad LIKE ? 
+           OR Banner_Pfad LIKE ?;
+    """, (f"%{tmdb_id}.%", f"%{tmdb_id}.%"))
     row = cursor.fetchone()
     conn.close()
     
@@ -329,3 +324,25 @@ def api_media_details(tmdb_id):
         compat_res[k.lower()] = v
         
     return compat_res
+
+
+@bottle.route('/<path:path>')
+def serve_static(path):
+    root_dir = os.path.dirname(os.path.abspath(__file__))
+    frontend_dir = os.path.join(root_dir, "frontend")
+    if not os.path.isdir(frontend_dir):
+        # PyInstaller temp directory fallback
+        if hasattr(sys, '_MEIPASS'):
+            frontend_dir = os.path.join(sys._MEIPASS, "frontend")
+            
+    return bottle.static_file(path, root=frontend_dir)
+
+@bottle.route('/')
+def serve_index():
+    root_dir = os.path.dirname(os.path.abspath(__file__))
+    frontend_dir = os.path.join(root_dir, "frontend")
+    if not os.path.isdir(frontend_dir):
+        if hasattr(sys, '_MEIPASS'):
+            frontend_dir = os.path.join(sys._MEIPASS, "frontend")
+            
+    return bottle.static_file("index.html", root=frontend_dir)

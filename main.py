@@ -42,7 +42,6 @@ os.chdir(DATA_DIR)
 
 from database import DatabaseManager
 from api import TMDBClient
-from ui import CinePalastApp
 
 def ensure_ico_exists():
     """Converts assets/DTB.png to icon.ico if it doesn't exist yet."""
@@ -127,6 +126,7 @@ def main():
         tmdb_client = TMDBClient()
         
         # Create and run the CustomTkinter App
+        from ui import CinePalastApp
         app = CinePalastApp(db_manager=db_manager, tmdb_client=tmdb_client)
         app.mainloop()
         

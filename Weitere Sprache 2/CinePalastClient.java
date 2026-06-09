@@ -58,10 +58,19 @@ public class CinePalastClient {
             try (java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
                 if (query != null && !query.trim().isEmpty()) {
                     String likeQuery = "%" + query + "%";
-                    // Dynamic binding of arguments based on parameter placeholders count
-                    int paramCount = pstmt.getParameterMetaData().getParameterCount();
-                    for (int i = 1; i <= paramCount; i++) {
-                        pstmt.setString(i, likeQuery);
+                    if ("Film".equals(filter)) {
+                        pstmt.setString(1, likeQuery);
+                        pstmt.setString(2, likeQuery);
+                    } else if ("Schauspieler".equals(filter)) {
+                        pstmt.setString(1, likeQuery);
+                    } else if ("Regisseur".equals(filter)) {
+                        pstmt.setString(1, likeQuery);
+                    } else {
+                        pstmt.setString(1, likeQuery);
+                        pstmt.setString(2, likeQuery);
+                        pstmt.setString(3, likeQuery);
+                        pstmt.setString(4, likeQuery);
+                        pstmt.setString(5, likeQuery);
                     }
                 }
                 
@@ -104,7 +113,12 @@ public class CinePalastClient {
     }
 
     public static void main(String[] args) {
-        String dbPath = args.length > 0 ? args[0] : "../CinePalast/cinepalast.db";
+        if (args.length < 1) {
+            System.out.println("Fehler: dbPath ist erforderlich.");
+            System.out.println("Verwendung: CinePalastClient <dbPath> [query] [filter]");
+            return;
+        }
+        String dbPath = args[0];
         String searchQuery = args.length > 1 ? args[1] : "";
         String searchFilter = args.length > 2 ? args[2] : "Alles";
 

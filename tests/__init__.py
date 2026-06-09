@@ -1,0 +1,1 @@
+# CinePalast tests package
