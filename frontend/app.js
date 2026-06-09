@@ -1,6 +1,8 @@
 // --- State Management ---
 let appState = {
     movies: [],
+    popularMovies: [],
+    onlineSearchResults: [],
     viewMode: 'Galerie', // 'Galerie' or 'Tabelle'
     config: {},
     currentMovie: null,
@@ -91,10 +93,17 @@ async function initApp() {
         // 4. Set search filter dropdown
         dom.searchFilter.value = appState.searchFilter;
         
-        // 5. Load and display movies
+        // 5. Load popular movies
+        try {
+            appState.popularMovies = await pywebview.api.get_popular_movies();
+        } catch (e) {
+            console.error("Failed to load popular movies:", e);
+        }
+        
+        // 6. Load and display movies
         await refreshMovies();
         
-        // 6. Bind events
+        // 7. Bind events
         bindEvents();
         
         hideLoading();
@@ -113,13 +122,11 @@ function bindEvents() {
         performSearch();
     });
 
-    // Support pressing Enter key in search to trigger online search if empty
+    // Support pressing Enter key in search to trigger online search
     dom.searchInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            if (appState.movies.length === 0 && appState.searchQuery.trim().length > 0) {
-                triggerOnlineSearch();
-            }
+            triggerOnlineSearch();
         }
     });
 
@@ -159,16 +166,15 @@ function bindEvents() {
     document.getElementById('btn-browse-poster').addEventListener('click', () => browseAsset('poster'));
     document.getElementById('btn-browse-banner').addEventListener('click', () => browseAsset('banner'));
     
-    // Movie details footer
-    document.getElementById('btn-edit-current').addEventListener('click', () => {
+    // Details download buttons
+    document.getElementById('btn-download-poster').addEventListener('click', () => {
         if (appState.currentMovie) {
-            closeModal('modal-details');
-            openMovieForm(appState.currentMovie);
+            downloadPoster(appState.currentMovie);
         }
     });
-    document.getElementById('btn-delete-current').addEventListener('click', () => {
+    document.getElementById('btn-download-banner').addEventListener('click', () => {
         if (appState.currentMovie) {
-            deleteMovie(appState.currentMovie.ID);
+            downloadBanner(appState.currentMovie);
         }
     });
 }
@@ -232,17 +238,49 @@ let searchDebounceTimeout;
 function performSearch() {
     clearTimeout(searchDebounceTimeout);
     searchDebounceTimeout = setTimeout(async () => {
-        showLoading("Suche in der Datenbank...");
-        await refreshMovies();
-        
-        // If query is set but no local results, show "Online suchen" button
-        if (appState.movies.length === 0 && appState.searchQuery.trim().length > 0) {
-            dom.btnEmptyOnlineSearch.style.display = 'inline-flex';
+        const query = appState.searchQuery.trim();
+        if (query.length > 0) {
+            showLoading("Suche...");
+            // Local search
+            appState.movies = await pywebview.api.search_movies(query, appState.searchFilter);
+            // Online search automatically
+            try {
+                appState.onlineSearchResults = await pywebview.api.search_online(query, appState.searchFilter);
+            } catch (e) {
+                console.error("Online search failed:", e);
+                appState.onlineSearchResults = [];
+            }
+            hideLoading();
         } else {
-            dom.btnEmptyOnlineSearch.style.display = 'none';
+            appState.onlineSearchResults = [];
+            await refreshMovies();
         }
-        hideLoading();
-    }, 250);
+        renderMovies();
+    }, 400);
+}
+
+// --- Normalize Movie Objects ---
+function normalizeMovie(movie) {
+    if (!movie) return null;
+    return {
+        ID: movie.ID || null,
+        tmdb_id: movie.tmdb_id || movie.id || null,
+        Name: movie.Name || movie.titel || movie.title || 'Unbekannt',
+        Jahr: movie.Jahr || movie.jahr || (movie.release_date ? movie.release_date.split('-')[0] : null) || null,
+        Regisseur: movie.Regisseur || movie.regisseur || null,
+        Laufzeit_min: movie.Laufzeit_min || movie.laufzeit_min || null,
+        Genre: movie.Genre || movie.genre || null,
+        Filmreihe: movie.Filmreihe || movie.filmreihe || null,
+        FSK: movie.FSK || movie.fsk || null,
+        Produktionsfirma: movie.Produktionsfirma || movie.produktionsfirma || null,
+        Produktionsland: movie.Produktionsland || movie.produktionsland || null,
+        Beschreibung: movie.Beschreibung || movie.beschreibung || null,
+        Schauspieler: movie.Schauspieler || movie.schauspieler || null,
+        Deutsche_Synchronsprecher: movie.Deutsche_Synchronsprecher || movie.deutsche_synchronsprecher || null,
+        Poster_Pfad: movie.Poster_Pfad || movie.poster_path || movie.poster_pfad || null,
+        Banner_Pfad: movie.Banner_Pfad || movie.backdrop_path || movie.banner_path || movie.banner_pfad || null,
+        isOnline: !movie.ID
+    };
 }
 
 // --- Render Movie Cards & Table Rows ---
@@ -250,95 +288,316 @@ function renderMovies() {
     dom.movieGrid.innerHTML = '';
     dom.movieTableBody.innerHTML = '';
 
-    if (appState.movies.length === 0) {
-        dom.emptyState.style.display = 'flex';
-        dom.movieGrid.classList.remove('active');
-        dom.movieTableWrapper.classList.remove('active');
-        return;
-    }
+    const hasLocal = appState.movies.length > 0;
+    const hasOnline = appState.onlineSearchResults && appState.onlineSearchResults.length > 0;
+    const isSearching = appState.searchQuery.trim().length > 0;
 
-    dom.emptyState.style.display = 'none';
-    if (appState.viewMode === 'Galerie') {
-        dom.movieGrid.classList.add('active');
-        dom.movieTableWrapper.classList.remove('active');
-    } else {
-        dom.movieGrid.classList.remove('active');
-        dom.movieTableWrapper.classList.add('active');
-    }
-
-    appState.movies.forEach(movie => {
-        // 1. Render Gallery Card
-        const card = document.createElement('div');
-        card.className = 'movie-card';
-        card.addEventListener('click', () => showMovieDetails(movie));
-
-        const imgContainer = document.createElement('div');
-        imgContainer.className = 'movie-card-img-container';
-
-        if (movie.Poster_Pfad) {
-            const img = document.createElement('img');
-            img.src = getMediaUrl(movie.Poster_Pfad);
-            img.className = 'movie-card-img';
-            img.alt = movie.Name;
-            // Handle loading error
-            img.onerror = () => {
-                imgContainer.innerHTML = getPlaceholderHtml(movie.Name);
-            };
-            imgContainer.appendChild(img);
-        } else {
-            imgContainer.innerHTML = getPlaceholderHtml(movie.Name);
-        }
-
-        const meta = document.createElement('div');
-        meta.className = 'movie-card-meta';
+    // Search query banner status
+    if (isSearching) {
+        const searchStatusText = `Du hast nach "${appState.searchQuery}" gesucht. Hier sind die folgenden Ergebnisse:`;
         
-        const title = document.createElement('div');
-        title.className = 'movie-card-title';
-        title.innerText = movie.Name;
+        if (appState.viewMode === 'Galerie') {
+            const statusDiv = document.createElement('div');
+            statusDiv.className = 'search-status-text';
+            statusDiv.innerText = searchStatusText;
+            dom.movieGrid.appendChild(statusDiv);
+        } else {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td colspan="8" style="padding: 10px; border-bottom: none;"><div class="search-status-text">${searchStatusText}</div></td>`;
+            dom.movieTableBody.appendChild(tr);
+        }
+    }
 
-        const year = document.createElement('div');
-        year.className = 'movie-card-year';
-        year.innerText = movie.Jahr || 'k.A.';
+    if (appState.viewMode === 'Galerie') {
+        // --- GALLERY VIEW ---
+        
+        // 1. Meine Bibliothek Section
+        if (hasLocal) {
+            const header = document.createElement('div');
+            header.className = 'section-header-title';
+            header.innerText = isSearching ? 'Meine Bibliothek (Treffer)' : 'Meine Bibliothek';
+            dom.movieGrid.appendChild(header);
+            
+            appState.movies.forEach(movie => {
+                const normMovie = normalizeMovie(movie);
+                const card = createMovieCard(normMovie);
+                dom.movieGrid.appendChild(card);
+            });
+        } else if (isSearching) {
+            const header = document.createElement('div');
+            header.className = 'section-header-title';
+            header.innerText = 'Meine Bibliothek';
+            dom.movieGrid.appendChild(header);
+            
+            const emptyLabel = document.createElement('div');
+            emptyLabel.className = 'movie-card-placeholder';
+            emptyLabel.style.gridColumn = '1 / -1';
+            emptyLabel.style.height = '60px';
+            emptyLabel.style.background = 'transparent';
+            emptyLabel.style.border = 'none';
+            emptyLabel.innerHTML = '<span style="color:var(--text-muted);">Keine passenden Filme in Ihrer Bibliothek.</span>';
+            dom.movieGrid.appendChild(emptyLabel);
+        }
+        
+        // 2. Online Section / Popular Movies Section
+        if (isSearching) {
+            const header = document.createElement('div');
+            header.className = 'section-header-title';
+            header.innerText = 'Online-Suchergebnisse (TMDB)';
+            dom.movieGrid.appendChild(header);
+            
+            if (hasOnline) {
+                appState.onlineSearchResults.forEach(movie => {
+                    const isLocal = appState.movies.some(m => m.tmdb_id === movie.tmdb_id);
+                    const normMovie = normalizeMovie(movie);
+                    if (isLocal) {
+                        const localMovie = appState.movies.find(m => m.tmdb_id === movie.tmdb_id);
+                        normMovie.ID = localMovie.ID;
+                        normMovie.isOnline = false;
+                        normMovie.Poster_Pfad = localMovie.Poster_Pfad;
+                        normMovie.Banner_Pfad = localMovie.Banner_Pfad;
+                    }
+                    const card = createMovieCard(normMovie);
+                    dom.movieGrid.appendChild(card);
+                });
+            } else {
+                const emptyLabel = document.createElement('div');
+                emptyLabel.className = 'movie-card-placeholder';
+                emptyLabel.style.gridColumn = '1 / -1';
+                emptyLabel.style.height = '60px';
+                emptyLabel.style.background = 'transparent';
+                emptyLabel.style.border = 'none';
+                emptyLabel.innerHTML = '<span style="color:var(--text-muted);">Keine Online-Treffer gefunden.</span>';
+                dom.movieGrid.appendChild(emptyLabel);
+            }
+        } else {
+            // Show popular movies
+            const header = document.createElement('div');
+            header.className = 'section-header-title';
+            header.innerText = 'Aktuell beliebte Filme';
+            dom.movieGrid.appendChild(header);
+            
+            if (appState.popularMovies && appState.popularMovies.length > 0) {
+                appState.popularMovies.forEach(movie => {
+                    const isLocal = appState.movies.some(m => m.tmdb_id === movie.tmdb_id);
+                    const normMovie = normalizeMovie(movie);
+                    if (isLocal) {
+                        const localMovie = appState.movies.find(m => m.tmdb_id === movie.tmdb_id);
+                        normMovie.ID = localMovie.ID;
+                        normMovie.isOnline = false;
+                        normMovie.Poster_Pfad = localMovie.Poster_Pfad;
+                        normMovie.Banner_Pfad = localMovie.Banner_Pfad;
+                    }
+                    const card = createMovieCard(normMovie);
+                    dom.movieGrid.appendChild(card);
+                });
+            } else {
+                const emptyLabel = document.createElement('div');
+                emptyLabel.className = 'movie-card-placeholder';
+                emptyLabel.style.gridColumn = '1 / -1';
+                emptyLabel.style.height = '60px';
+                emptyLabel.style.background = 'transparent';
+                emptyLabel.style.border = 'none';
+                emptyLabel.innerHTML = '<span style="color:var(--text-muted);">Lade beliebte Filme...</span>';
+                dom.movieGrid.appendChild(emptyLabel);
+            }
+        }
+    } else {
+        // --- TABLE VIEW ---
+        
+        // 1. Meine Bibliothek Section
+        if (hasLocal) {
+            const trHeader = document.createElement('tr');
+            trHeader.innerHTML = `<td colspan="8" class="table-section-header">${isSearching ? 'Meine Bibliothek (Treffer)' : 'Meine Bibliothek'}</td>`;
+            dom.movieTableBody.appendChild(trHeader);
+            
+            appState.movies.forEach(movie => {
+                const normMovie = normalizeMovie(movie);
+                const tr = createMovieRow(normMovie);
+                dom.movieTableBody.appendChild(tr);
+            });
+        } else if (isSearching) {
+            const trHeader = document.createElement('tr');
+            trHeader.innerHTML = `<td colspan="8" class="table-section-header">Meine Bibliothek</td>`;
+            dom.movieTableBody.appendChild(trHeader);
+            
+            const trEmpty = document.createElement('tr');
+            trEmpty.innerHTML = `<td colspan="8" style="text-align: center; color: var(--text-muted); padding: 15px;">Keine passenden Filme in Ihrer Bibliothek.</td>`;
+            dom.movieTableBody.appendChild(trEmpty);
+        }
+        
+        // 2. Online Section / Popular Movies Section
+        if (isSearching) {
+            const trHeader = document.createElement('tr');
+            trHeader.innerHTML = `<td colspan="8" class="table-section-header">Online-Suchergebnisse (TMDB)</td>`;
+            dom.movieTableBody.appendChild(trHeader);
+            
+            if (hasOnline) {
+                appState.onlineSearchResults.forEach(movie => {
+                    const isLocal = appState.movies.some(m => m.tmdb_id === movie.tmdb_id);
+                    const normMovie = normalizeMovie(movie);
+                    if (isLocal) {
+                        const localMovie = appState.movies.find(m => m.tmdb_id === movie.tmdb_id);
+                        normMovie.ID = localMovie.ID;
+                        normMovie.isOnline = false;
+                        normMovie.Poster_Pfad = localMovie.Poster_Pfad;
+                        normMovie.Banner_Pfad = localMovie.Banner_Pfad;
+                    }
+                    const tr = createMovieRow(normMovie);
+                    dom.movieTableBody.appendChild(tr);
+                });
+            } else {
+                const trEmpty = document.createElement('tr');
+                trEmpty.innerHTML = `<td colspan="8" style="text-align: center; color: var(--text-muted); padding: 15px;">Keine Online-Ergebnisse.</td>`;
+                dom.movieTableBody.appendChild(trEmpty);
+            }
+        } else {
+            const trHeader = document.createElement('tr');
+            trHeader.innerHTML = `<td colspan="8" class="table-section-header">Aktuell beliebte Filme</td>`;
+            dom.movieTableBody.appendChild(trHeader);
+            
+            if (appState.popularMovies && appState.popularMovies.length > 0) {
+                appState.popularMovies.forEach(movie => {
+                    const isLocal = appState.movies.some(m => m.tmdb_id === movie.tmdb_id);
+                    const normMovie = normalizeMovie(movie);
+                    if (isLocal) {
+                        const localMovie = appState.movies.find(m => m.tmdb_id === movie.tmdb_id);
+                        normMovie.ID = localMovie.ID;
+                        normMovie.isOnline = false;
+                        normMovie.Poster_Pfad = localMovie.Poster_Pfad;
+                        normMovie.Banner_Pfad = localMovie.Banner_Pfad;
+                    }
+                    const tr = createMovieRow(normMovie);
+                    dom.movieTableBody.appendChild(tr);
+                });
+            } else {
+                const trEmpty = document.createElement('tr');
+                trEmpty.innerHTML = `<td colspan="8" style="text-align: center; color: var(--text-muted); padding: 15px;">Keine beliebten Filme geladen.</td>`;
+                dom.movieTableBody.appendChild(trEmpty);
+            }
+        }
+    }
+}
 
-        meta.appendChild(title);
-        meta.appendChild(year);
-        card.appendChild(imgContainer);
-        card.appendChild(meta);
-        dom.movieGrid.appendChild(card);
+// --- Create Movie Card for Gallery ---
+function createMovieCard(movie) {
+    const card = document.createElement('div');
+    card.className = 'movie-card';
+    if (movie.isOnline) {
+        card.classList.add('online-card');
+        card.addEventListener('click', () => showOnlineMovieDetails(movie.tmdb_id, movie.Name));
+    } else {
+        card.addEventListener('click', () => showMovieDetails(movie));
+    }
 
-        // 2. Render Table Row
-        const tr = document.createElement('tr');
+    const imgContainer = document.createElement('div');
+    imgContainer.className = 'movie-card-img-container';
+
+    let src = '';
+    if (movie.Poster_Pfad) {
+        if (movie.isOnline && !movie.Poster_Pfad.startsWith('http')) {
+            src = `https://image.tmdb.org/t/p/w342${movie.Poster_Pfad}`;
+        } else {
+            src = getMediaUrl(movie.Poster_Pfad);
+        }
+    }
+
+    if (src) {
+        const img = document.createElement('img');
+        img.src = src;
+        img.className = 'movie-card-img';
+        img.alt = movie.Name;
+        img.onerror = () => {
+            imgContainer.innerHTML = getPlaceholderHtml(movie.Name);
+        };
+        imgContainer.appendChild(img);
+    } else {
+        imgContainer.innerHTML = getPlaceholderHtml(movie.Name);
+    }
+
+    if (movie.isOnline) {
+        const overlay = document.createElement('div');
+        overlay.className = 'import-overlay';
+        overlay.innerHTML = `<button class="btn btn-primary btn-glow btn-import-card">Importieren</button>`;
+        overlay.querySelector('.btn-import-card').addEventListener('click', (e) => {
+            e.stopPropagation();
+            importMovie(movie.tmdb_id, movie.Name);
+        });
+        imgContainer.appendChild(overlay);
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'movie-card-meta';
+    
+    const title = document.createElement('div');
+    title.className = 'movie-card-title';
+    title.innerText = movie.Name;
+
+    const year = document.createElement('div');
+    year.className = 'movie-card-year';
+    year.innerText = movie.Jahr || 'k.A.';
+
+    meta.appendChild(title);
+    meta.appendChild(year);
+    card.appendChild(imgContainer);
+    card.appendChild(meta);
+    return card;
+}
+
+// --- Create Movie Row for Table ---
+function createMovieRow(movie) {
+    const tr = document.createElement('tr');
+    if (movie.isOnline) {
+        tr.classList.add('online-row');
         tr.addEventListener('click', (e) => {
-            // Don't open details if clicking on action buttons
+            if (e.target.closest('.table-actions')) return;
+            showOnlineMovieDetails(movie.tmdb_id, movie.Name);
+        });
+    } else {
+        tr.addEventListener('click', (e) => {
             if (e.target.closest('.table-actions')) return;
             showMovieDetails(movie);
         });
+    }
 
-        tr.innerHTML = `
-            <td>${movie.ID}</td>
-            <td style="font-weight: 600;">${movie.Name}</td>
-            <td>${movie.Jahr || 'k.A.'}</td>
-            <td>${movie.Regisseur || 'k.A.'}</td>
-            <td>${movie.Genre || 'k.A.'}</td>
-            <td>${movie.Laufzeit_min ? movie.Laufzeit_min + ' Min.' : 'k.A.'}</td>
-            <td>${movie.Filmreihe || '—'}</td>
-            <td>
-                <div class="table-actions">
-                    <button class="table-action-btn edit-row-btn" title="Bearbeiten">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    const idText = movie.isOnline ? '—' : String(movie.ID).padStart(2, '0');
+    
+    tr.innerHTML = `
+        <td>${idText}</td>
+        <td style="font-weight: 600;">${movie.Name}</td>
+        <td>${movie.Jahr || 'k.A.'}</td>
+        <td>${movie.Regisseur || '—'}</td>
+        <td>${movie.Genre || '—'}</td>
+        <td>${movie.Laufzeit_min ? movie.Laufzeit_min + ' Min.' : '—'}</td>
+        <td>${movie.Filmreihe || '—'}</td>
+        <td>
+            <div class="table-actions">
+                ${movie.isOnline ? `
+                    <button class="table-action-btn import-row-btn" style="color: var(--accent); font-weight: bold; border: 1px solid var(--accent); border-radius: 4px; padding: 2px 6px;">
+                        📥 Import
                     </button>
+                ` : `
                     <button class="table-action-btn delete-row-btn" title="Löschen">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                     </button>
-                </div>
-            </td>
-        `;
+                `}
+            </div>
+        </td>
+    `;
 
-        tr.querySelector('.edit-row-btn').addEventListener('click', () => openMovieForm(movie));
-        tr.querySelector('.delete-row-btn').addEventListener('click', () => deleteMovie(movie.ID));
+    if (movie.isOnline) {
+        tr.querySelector('.import-row-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            importMovie(movie.tmdb_id, movie.Name);
+        });
+    } else {
+        tr.querySelector('.delete-row-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteMovie(movie.ID);
+        });
+    }
 
-        dom.movieTableBody.appendChild(tr);
-    });
+    return tr;
 }
 
 function getPlaceholderHtml(title) {
@@ -355,12 +614,20 @@ function getMediaUrl(dbPath) {
     if (dbPath.startsWith('http://') || dbPath.startsWith('https://')) {
         return dbPath;
     }
-    // Reformat relative paths to communicate with local bottle server media endpoints
-    if (dbPath.startsWith('assets/posters/')) {
-        return '/media/posters/' + dbPath.replace('assets/posters/', '');
+    const normalized = dbPath.replace(/\\/g, '/');
+    if (normalized.includes('/posters/')) {
+        const parts = normalized.split('/posters/');
+        return '/media/posters/' + parts[parts.length - 1];
     }
-    if (dbPath.startsWith('assets/banners/')) {
-        return '/media/banners/' + dbPath.replace('assets/banners/', '');
+    if (normalized.includes('/banners/')) {
+        const parts = normalized.split('/banners/');
+        return '/media/banners/' + parts[parts.length - 1];
+    }
+    if (normalized.startsWith('assets/posters/')) {
+        return '/media/posters/' + normalized.replace('assets/posters/', '');
+    }
+    if (normalized.startsWith('assets/banners/')) {
+        return '/media/banners/' + normalized.replace('assets/banners/', '');
     }
     return dbPath;
 }
@@ -393,24 +660,252 @@ function showMovieDetails(movie) {
 
     // Banner and Poster URLs
     const bannerEl = document.getElementById('detail-banner');
+    const btnDownloadBanner = document.getElementById('btn-download-banner');
     if (movie.Banner_Pfad) {
-        bannerEl.src = getMediaUrl(movie.Banner_Pfad);
+        if (movie.isOnline && !movie.Banner_Pfad.startsWith('http')) {
+            bannerEl.src = `https://image.tmdb.org/t/p/w780${movie.Banner_Pfad}`;
+        } else {
+            bannerEl.src = getMediaUrl(movie.Banner_Pfad);
+        }
         bannerEl.style.display = 'block';
+        btnDownloadBanner.style.display = movie.isOnline ? 'none' : 'block';
     } else {
         bannerEl.src = '';
         bannerEl.style.display = 'none';
+        btnDownloadBanner.style.display = 'none';
     }
 
     const posterEl = document.getElementById('detail-poster');
+    const btnDownloadPoster = document.getElementById('btn-download-poster');
     if (movie.Poster_Pfad) {
-        posterEl.src = getMediaUrl(movie.Poster_Pfad);
+        if (movie.isOnline && !movie.Poster_Pfad.startsWith('http')) {
+            posterEl.src = `https://image.tmdb.org/t/p/w342${movie.Poster_Pfad}`;
+        } else {
+            posterEl.src = getMediaUrl(movie.Poster_Pfad);
+        }
         posterEl.style.display = 'block';
+        btnDownloadPoster.style.display = movie.isOnline ? 'none' : 'block';
     } else {
         posterEl.src = '';
         posterEl.style.display = 'none';
+        btnDownloadPoster.style.display = 'none';
+    }
+
+    // Configure footer actions
+    const footerActions = document.querySelector('.detail-footer-actions');
+    if (movie.isOnline) {
+        footerActions.innerHTML = `
+            <button id="btn-import-current" class="btn btn-primary btn-glow" style="width: 100%;">
+                📥 Film importieren
+            </button>
+        `;
+        document.getElementById('btn-import-current').addEventListener('click', () => {
+            importMovie(movie.tmdb_id, movie.Name);
+        });
+    } else {
+        footerActions.innerHTML = `
+            <button id="btn-copy-discord" class="btn btn-primary btn-glow" style="background: #5865F2; color: white; border: none; box-shadow: 0 0 12px rgba(88, 101, 242, 0.4);">
+                📋 Discord-Text kopieren
+            </button>
+            <button id="btn-delete-current" class="btn btn-danger">Löschen</button>
+        `;
+        document.getElementById('btn-copy-discord').addEventListener('click', () => {
+            copyDiscordText(movie);
+        });
+        document.getElementById('btn-delete-current').addEventListener('click', () => {
+            deleteMovie(movie.ID);
+        });
     }
 
     openModal('modal-details');
+}
+
+// --- Import movie directly from search or details modal ---
+async function importMovie(tmdbId, movieName) {
+    showLoading(`Importiere '${movieName}'...`);
+    try {
+        const details = await pywebview.api.get_movie_details(tmdbId);
+        if (!details) {
+            showCustomAlert("Filmdetails konnten nicht geladen werden.", "Importfehler");
+            hideLoading();
+            return;
+        }
+        
+        const movieData = {
+            tmdb_id: tmdbId,
+            Name: details.titel || movieName,
+            Jahr: details.jahr ? parseInt(details.jahr) : null,
+            Regisseur: details.regisseur || null,
+            Laufzeit_min: details.laufzeit_min ? parseInt(details.laufzeit_min) : null,
+            Genre: details.genre || null,
+            Filmreihe: details.filmreihe || null,
+            FSK: details.fsk || null,
+            Produktionsfirma: details.produktionsfirma || null,
+            Produktionsland: details.produktionsland || null,
+            Beschreibung: details.beschreibung || null,
+            Schauspieler: details.schauspieler || null,
+            Deutsche_Synchronsprecher: details.deutsche_synchronsprecher || null,
+            Poster_Pfad: details.poster_path || null,
+            Banner_Pfad: details.backdrop_path || null
+        };
+        
+        const res = await pywebview.api.add_movie(movieData);
+        hideLoading();
+        
+        if (res.success) {
+            showCustomAlert(`'${movieName}' wurde erfolgreich importiert!`, "Import erfolgreich");
+            closeModal('modal-details');
+            
+            // Refresh
+            if (appState.searchQuery.trim().length > 0) {
+                performSearch();
+            } else {
+                await refreshMovies();
+            }
+        } else {
+            showCustomAlert("Fehler beim Importieren: " + res.error, "Importfehler");
+        }
+    } catch (e) {
+        console.error("Import failed:", e);
+        hideLoading();
+    }
+}
+
+// --- Show details for an online/popular movie ---
+async function showOnlineMovieDetails(tmdbId, movieName) {
+    showLoading("Lade Filminformationen...");
+    try {
+        const details = await pywebview.api.get_movie_details(tmdbId);
+        hideLoading();
+        if (details) {
+            const normalized = normalizeMovie({
+                id: tmdbId,
+                titel: details.titel || movieName,
+                jahr: details.jahr || '',
+                regisseur: details.regisseur || '',
+                laufzeit_min: details.laufzeit_min || '',
+                genre: details.genre || '',
+                filmreihe: details.filmreihe || '',
+                fsk: details.fsk || '',
+                produktionsfirma: details.produktionsfirma || '',
+                produktionsland: details.produktionsland || '',
+                beschreibung: details.beschreibung || '',
+                schauspieler: details.schauspieler || '',
+                deutsche_synchronsprecher: details.deutsche_synchronsprecher || '',
+                poster_path: details.poster_path || '',
+                backdrop_path: details.backdrop_path || ''
+            });
+            showMovieDetails(normalized);
+        } else {
+            showCustomAlert("Filmdetails konnten nicht geladen werden.", "Fehler");
+        }
+    } catch (e) {
+        console.error("Failed loading online details:", e);
+        hideLoading();
+    }
+}
+
+// --- Discord embed text formatting & copying ---
+function generateDiscordText(movie) {
+    const titel = movie.Name || 'Unbekannt';
+    const jahr = movie.Jahr;
+    const jahrStr = jahr ? ` (${jahr})` : '';
+    const genres = movie.Genre || 'k.A.';
+    const laufzeit = movie.Laufzeit_min || 0;
+    const fsk = movie.FSK ? `ab ${movie.FSK}` : 'k.A.';
+    const regisseur = movie.Regisseur || 'k.A.';
+    const cast = (movie.Schauspieler || 'k.A.').trim();
+    const beschreibung = (movie.Beschreibung || 'Keine Beschreibung vorhanden.').trim();
+    const filmreihe = (movie.Filmreihe || '').trim();
+    const studio = movie.Produktionsfirma || 'k.A.';
+    const land = movie.Produktionsland || 'k.A.';
+    const synchronsprecher = (movie.Deutsche_Synchronsprecher || '').trim();
+
+    const castFormatted = cast.split('\n').map(line => `> ${line}`).join('\n');
+    const descFormatted = beschreibung.split('\n').map(line => `> ${line}`).join('\n');
+
+    let lines = [
+        `**🎬 CinePalast Film-Tipp: ${titel}${jahrStr}**`,
+        `> **Genre:** ${genres} | **Laufzeit:** ${laufzeit} Min. | **FSK:** ${fsk}`,
+        `> **Regisseur:** ${regisseur} | **Studio:** ${studio} | **Land:** ${land}`
+    ];
+
+    if (filmreihe && filmreihe !== '-') {
+        lines.push(`> **Filmreihe:** ${filmreihe}`);
+    }
+
+    lines.push(`> **Besetzung:**`);
+    lines.push(castFormatted);
+
+    if (synchronsprecher && synchronsprecher !== '-') {
+        const syncFormatted = synchronsprecher.split('\n').map(line => `> ${line}`).join('\n');
+        lines.push(`> **Deutsche Stimmen:**`);
+        lines.push(syncFormatted);
+    }
+
+    lines.push(`>`);
+    lines.push(`> 📝 **Handlung & Beschreibung:**`);
+    lines.push(descFormatted);
+    lines.push(`>`);
+    lines.push(`> *Gesendet aus dem CinePalast Manager von Mannis Kinopalast*`);
+
+    let text = lines.join('\n');
+    if (text.length > 1990) {
+        text = text.substring(0, 1987) + '...';
+    }
+    return text;
+}
+
+async function copyDiscordText(movie) {
+    const text = generateDiscordText(movie);
+    try {
+        await navigator.clipboard.writeText(text);
+        showCustomAlert("Die Discord-Beschreibung wurde erfolgreich in Ihre Zwischenablage kopiert!", "Discord-Text kopiert");
+    } catch (err) {
+        console.error('Failed to copy text: ', err);
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showCustomAlert("Die Discord-Beschreibung wurde erfolgreich kopiert!", "Discord-Text kopiert");
+    }
+}
+
+// --- Save Poster/Banner to Desktop ---
+async function downloadPoster(movie) {
+    if (!movie.Poster_Pfad) return;
+    showLoading("Speichere Poster...");
+    try {
+        const res = await pywebview.api.download_image_to_desktop(movie.Name, movie.Poster_Pfad, 'poster');
+        hideLoading();
+        if (res.success) {
+            showCustomAlert(`Das Film-Poster wurde auf Ihrem Desktop gespeichert als:\n\n${res.filename}`, "Poster gespeichert");
+        } else {
+            showCustomAlert("Fehler beim Speichern: " + res.error, "Fehler");
+        }
+    } catch (e) {
+        console.error(e);
+        hideLoading();
+    }
+}
+
+async function downloadBanner(movie) {
+    if (!movie.Banner_Pfad) return;
+    showLoading("Speichere Banner...");
+    try {
+        const res = await pywebview.api.download_image_to_desktop(movie.Name, movie.Banner_Pfad, 'banner');
+        hideLoading();
+        if (res.success) {
+            showCustomAlert(`Das Filmbanner wurde auf Ihrem Desktop gespeichert als:\n\n${res.filename}`, "Banner gespeichert");
+        } else {
+            showCustomAlert("Fehler beim Speichern: " + res.error, "Fehler");
+        }
+    } catch (e) {
+        console.error(e);
+        hideLoading();
+    }
 }
 
 // --- Trigger online search if no local matches found ---
@@ -419,84 +914,11 @@ async function triggerOnlineSearch() {
     
     showLoading("Suche online auf TMDB...");
     try {
-        const matches = await pywebview.api.search_online(appState.searchQuery, appState.searchFilter);
-        hideLoading();
-        
-        if (matches && matches.length > 0) {
-            renderOnlineMatches(matches);
-        } else {
-            showCustomAlert(`Keine Online-Treffer für "${appState.searchQuery}" gefunden.`, "Online Suche");
-        }
+        appState.onlineSearchResults = await pywebview.api.search_online(appState.searchQuery, appState.searchFilter);
+        renderMovies();
     } catch (e) {
         console.error("Online search failed:", e);
-        hideLoading();
-    }
-}
-
-// --- Render Online search matches list ---
-function renderOnlineMatches(matches) {
-    const container = document.getElementById('online-matches-list');
-    container.innerHTML = '';
-    
-    matches.forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'match-item';
-        div.addEventListener('click', () => loadOnlineMovieDetails(item.tmdb_id));
-        
-        let posterImg = '';
-        if (item.poster_path) {
-            const url = `https://image.tmdb.org/t/p/w92${item.poster_path}`;
-            posterImg = `<img src="${url}" class="match-poster" alt="">`;
-        } else {
-            posterImg = `<div class="match-poster" style="display:flex;align-items:center;justify-content:center;background:#222;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/></svg></div>`;
-        }
-        
-        div.innerHTML = `
-            ${posterImg}
-            <div class="match-meta">
-                <span class="match-title">${item.titel}</span>
-                <span class="match-year">${item.jahr || 'k.A.'}</span>
-            </div>
-        `;
-        
-        container.appendChild(div);
-    });
-    
-    openModal('modal-online-matches');
-}
-
-// --- Load online movie details into form ---
-async function loadOnlineMovieDetails(tmdbId) {
-    closeModal('modal-online-matches');
-    showLoading("Lade Filminformationen von TMDB...");
-    
-    try {
-        const details = await pywebview.api.get_movie_details(tmdbId);
-        hideLoading();
-        
-        if (details) {
-            // Fill forms
-            openMovieForm({
-                ID: '',
-                tmdb_id: tmdbId,
-                Name: details.titel || '',
-                Jahr: details.jahr || '',
-                Regisseur: details.regisseur || '',
-                Laufzeit_min: details.laufzeit_min || '',
-                Genre: details.genre || '',
-                Filmreihe: details.filmreihe || '',
-                FSK: details.fsk || '',
-                Produktionsfirma: details.produktionsfirma || '',
-                Produktionsland: details.produktionsland || '',
-                Beschreibung: details.beschreibung || '',
-                Schauspieler: details.schauspieler || '',
-                Deutsche_Synchronsprecher: details.deutsche_synchronsprecher || '',
-                Poster_Pfad: details.poster_path || '',
-                Banner_Pfad: details.backdrop_path || ''
-            });
-        }
-    } catch (e) {
-        console.error("Failed loading TMDB details:", e);
+    } finally {
         hideLoading();
     }
 }

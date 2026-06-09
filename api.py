@@ -383,6 +383,51 @@ class TMDBClient:
             print(f"Web scraper fallback failed: {e}")
             return []
 
+    def get_popular_movies(self) -> List[Dict]:
+        """
+        Fetches currently popular movies from TMDB API.
+        If no API key is set, returns a default set of popular movies.
+        """
+        api_key = self.get_api_key()
+        if api_key:
+            try:
+                url = f"{self.BASE_URL}/movie/popular"
+                headers, params = self._get_auth(api_key)
+                params.update({
+                    "language": "de-DE",
+                    "page": 1
+                })
+                response = requests.get(url, headers=headers, params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                results = []
+                for item in data.get("results", []):
+                    release_date = item.get("release_date", "")
+                    year = release_date.split("-")[0] if release_date else "k.A."
+                    results.append({
+                        "tmdb_id": item["id"],
+                        "titel": item.get("title") or item.get("name") or "k.A.",
+                        "original_titel": item.get("original_title", ""),
+                        "jahr": year,
+                        "poster_path": item.get("poster_path")
+                    })
+                return results[:18]
+            except Exception as e:
+                print("Error get_popular_movies from TMDB API:", e)
+                
+        # Fallback list of popular movies if offline or no API key
+        return [
+            {"tmdb_id": 27205, "titel": "Inception", "jahr": "2010", "poster_path": "/inception.jpg"},
+            {"tmdb_id": 157336, "titel": "Interstellar", "jahr": "2014", "poster_path": "/gEU2Qv6ilfg7evl097tws8zK5fv.jpg"},
+            {"tmdb_id": 299534, "titel": "Avengers: Endgame", "jahr": "2019", "poster_path": "/or0650h6l1gBz35ONtZhp2gcJ1g.jpg"},
+            {"tmdb_id": 19995, "titel": "Avatar", "jahr": "2009", "poster_path": "/kyeqWdyUXW608126k5Q5668Fj5e.jpg"},
+            {"tmdb_id": 550, "titel": "Fight Club", "jahr": "1999", "poster_path": "/bPtQ1lPybM52JuNH5PQZCH12gqi.jpg"},
+            {"tmdb_id": 680, "titel": "Pulp Fiction", "jahr": "1994", "poster_path": "/fIE3Q2wYWXYczP26e4jEQcnVTgo.jpg"},
+            {"tmdb_id": 13, "titel": "Forrest Gump", "jahr": "1994", "poster_path": "/arw2gc5H27pqZ0yR49eeLr58R0I.jpg"},
+            {"tmdb_id": 278, "titel": "Die Verurteilten", "jahr": "1994", "poster_path": "/o4ru01q51h29b827C214061483.jpg"},
+            {"tmdb_id": 238, "titel": "Der Pate", "jahr": "1972", "poster_path": "/3bhD7Y0qpUr74uP2811z512nfsM.jpg"}
+        ]
+
     def scrape_synchronsprecher(self, title: str, year: Optional[int] = None) -> str:
         """
         Scrapes German voice actors for a movie title and optional release year from synchronkartei.de.

@@ -19,6 +19,13 @@ def serve_poster(filename):
         folder = os.path.join(custom_path, "posters")
         if os.path.exists(os.path.join(folder, filename)):
             return bottle.static_file(filename, root=folder)
+            
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if local_appdata:
+        appdata_folder = os.path.join(local_appdata, "CinePalast Manager", "assets", "posters")
+        if os.path.exists(os.path.join(appdata_folder, filename)):
+            return bottle.static_file(filename, root=appdata_folder)
+            
     return bottle.static_file(filename, root=os.path.join(get_app_dir(), "assets/posters"))
 
 @bottle.route('/media/banners/<filename>')
@@ -29,6 +36,13 @@ def serve_banner(filename):
         folder = os.path.join(custom_path, "banners")
         if os.path.exists(os.path.join(folder, filename)):
             return bottle.static_file(filename, root=folder)
+            
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if local_appdata:
+        appdata_folder = os.path.join(local_appdata, "CinePalast Manager", "assets", "banners")
+        if os.path.exists(os.path.join(appdata_folder, filename)):
+            return bottle.static_file(filename, root=appdata_folder)
+            
     return bottle.static_file(filename, root=os.path.join(get_app_dir(), "assets/banners"))
 
 

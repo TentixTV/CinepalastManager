@@ -109,11 +109,17 @@
                     <h1 id="detail-title">Filmtitel</h1>
                     <p id="detail-tagline"></p>
                 </div>
+                <button id="btn-download-banner" class="btn btn-secondary" style="position: absolute; top: 15px; right: 60px; font-size: 11px; padding: 6px 12px; z-index: 10; background: rgba(10,10,15,0.7); border-color: var(--accent);">
+                    📥 Banner speichern
+                </button>
             </div>
 
             <div class="detail-content-area">
                 <div class="detail-poster-col">
                     <img id="detail-poster" src="" alt="Poster" class="detail-poster-img shadow-lg">
+                    <button id="btn-download-poster" class="btn btn-secondary" style="width: 100%; margin-top: 10px; font-size: 11px; padding: 6px 12px; border-color: var(--accent);">
+                        📥 Poster speichern
+                    </button>
                 </div>
                 
                 <div class="detail-info-col">
@@ -159,7 +165,9 @@
                     </div>
 
                     <div class="detail-footer-actions">
-                        <button id="btn-edit-current" class="btn btn-secondary">Bearbeiten</button>
+                        <button id="btn-copy-discord" class="btn btn-primary btn-glow" style="background: #5865F2; color: white; border: none; box-shadow: 0 0 12px rgba(88, 101, 242, 0.4);">
+                            📋 Discord-Text kopieren
+                        </button>
                         <button id="btn-delete-current" class="btn btn-danger">Löschen</button>
                     </div>
                 </div>

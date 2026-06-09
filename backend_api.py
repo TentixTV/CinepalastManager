@@ -204,3 +204,69 @@ class CinePalastAPI:
             return {"success": True}
         except Exception as e:
             return {"error": str(e)}
+
+    def get_popular_movies(self) -> List[Dict]:
+        try:
+            return self.tmdb_client.get_popular_movies()
+        except Exception as e:
+            print("Error get_popular_movies in api:", e)
+            return []
+
+    def download_image_to_desktop(self, movie_title: str, file_path: str, img_type: str) -> Dict:
+        try:
+            if not file_path:
+                return {"error": "Kein Bild vorhanden."}
+                
+            # If it's a relative path starting with assets/, resolve it absolutely
+            abs_path = file_path
+            if not os.path.isabs(file_path):
+                # Check custom path first
+                config = api.load_config()
+                custom_path = config.get("custom_media_path", "").strip()
+                filename = os.path.basename(file_path)
+                
+                # Determine folder name
+                sub = "posters" if img_type == "poster" else "banners"
+                
+                resolved = False
+                if custom_path and os.path.isdir(custom_path):
+                    test_path = os.path.join(custom_path, sub, filename)
+                    if os.path.exists(test_path):
+                        abs_path = test_path
+                        resolved = True
+                
+                if not resolved:
+                    # Check AppData path
+                    local_appdata = os.environ.get("LOCALAPPDATA")
+                    if local_appdata:
+                        test_path = os.path.join(local_appdata, "CinePalast Manager", "assets", sub, filename)
+                        if os.path.exists(test_path):
+                            abs_path = test_path
+                            resolved = True
+                            
+                if not resolved:
+                    # Fallback to installation folder
+                    abs_path = os.path.join(self.get_app_dir(), "assets", sub, filename)
+            
+            if not os.path.exists(abs_path):
+                return {"error": f"Die Bilddatei wurde lokal nicht gefunden: {abs_path}"}
+                
+            import re
+            # Clean title
+            clean_title = re.sub(r'[\/\\\:\*\?\"\<\>\|]', '', movie_title)
+            clean_title = clean_title.replace(" ", "_")
+            
+            # Desktop dir
+            desktop_dir = os.path.join(os.environ["USERPROFILE"], "Desktop") if "USERPROFILE" in os.environ else os.path.expanduser("~/Desktop")
+            
+            ext = os.path.splitext(abs_path)[1]
+            if not ext:
+                ext = ".jpg"
+                
+            dest_filename = f"{clean_title}_{img_type}{ext}"
+            dest_path = os.path.join(desktop_dir, dest_filename)
+            
+            shutil.copy2(abs_path, dest_path)
+            return {"success": True, "filename": dest_filename}
+        except Exception as e:
+            return {"error": str(e)}

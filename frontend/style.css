@@ -887,3 +887,78 @@ body {
     font-weight: 600;
     color: var(--text-secondary);
 }
+
+/* --- Section Headers & Search Status styling --- */
+.section-header-title {
+    grid-column: 1 / -1;
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--accent);
+    margin-top: 24px;
+    margin-bottom: 8px;
+    border-bottom: 2px solid var(--accent-glow);
+    padding-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    text-shadow: 0 0 8px var(--accent-glow);
+}
+
+.table-section-header {
+    background: rgba(255, 255, 255, 0.04) !important;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--accent) !important;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    padding: 12px 16px !important;
+    text-shadow: 0 0 8px var(--accent-glow);
+    border-bottom: 2px solid var(--accent-glow) !important;
+}
+
+.search-status-text {
+    grid-column: 1 / -1;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: rgba(0, 240, 255, 0.05);
+    border: 1px dashed var(--accent);
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin-bottom: 12px;
+    font-weight: 600;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* --- Import Overlay for Online Movie Cards --- */
+.movie-card.online-card {
+    position: relative;
+}
+
+.movie-card.online-card .import-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    transition: var(--transition-smooth);
+    z-index: 2;
+}
+
+.movie-card.online-card:hover .import-overlay {
+    opacity: 1;
+}
+
+.btn-import-card {
+    transform: translateY(15px);
+    transition: var(--transition-smooth);
+    font-weight: bold;
+}
+
+.movie-card.online-card:hover .btn-import-card {
+    transform: translateY(0);
+}
