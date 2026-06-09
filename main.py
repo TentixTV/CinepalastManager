@@ -58,11 +58,11 @@ def ensure_ico_exists():
 def ensure_fsk_icons():
     """Downloads official German FSK logos from Wikimedia if they do not exist locally."""
     fsk_urls = {
-        "0": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/07/FSK_0.svg/240px-FSK_0.svg.png",
-        "6": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/FSK_6.svg/240px-FSK_6.svg.png",
-        "12": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/FSK_12.svg/240px-FSK_12.svg.png",
-        "16": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/FSK_16.svg/240px-FSK_16.svg.png",
-        "18": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/FSK_18.svg/240px-FSK_18.svg.png"
+        "0": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/FSK_0.svg/500px-FSK_0.svg.png",
+        "6": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/FSK_6.svg/500px-FSK_6.svg.png",
+        "12": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/FSK_12.svg/500px-FSK_12.svg.png",
+        "16": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/FSK_16.svg/500px-FSK_16.svg.png",
+        "18": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/FSK_18.svg/500px-FSK_18.svg.png"
     }
     fsk_folder = "assets/fsk"
     os.makedirs(fsk_folder, exist_ok=True)
@@ -70,7 +70,7 @@ def ensure_fsk_icons():
     def download_thread():
         import requests
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "CinePalastManager/2.0 (contact@tentix.com)"
         }
         for fsk, url in fsk_urls.items():
             dest = os.path.join(fsk_folder, f"fsk{fsk}.png")

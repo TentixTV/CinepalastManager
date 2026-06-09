@@ -105,7 +105,7 @@ class CinePalastAPI:
     def select_image_file(self) -> Optional[str]:
         if not self._window:
             return None
-        file_types = ('Bilder (*.jpg;*.jpeg;*.png;*.webp)', 'All files (*.*)')
+        file_types = ('Bilder (*.jpg;*.jpeg;*.png;*.webp;*.gif)', 'All files (*.*)')
         result = self._window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=file_types)
         if result and len(result) > 0:
             return result[0]
@@ -121,7 +121,11 @@ class CinePalastAPI:
             if custom_path and os.path.isdir(custom_path):
                 folder = os.path.join(custom_path, "posters" if img_type == "poster" else "banners")
             else:
-                folder = os.path.join(self.get_app_dir(), "assets", "posters" if img_type == "poster" else "banners")
+                local_appdata = os.environ.get("LOCALAPPDATA")
+                if local_appdata:
+                    folder = os.path.join(local_appdata, "CinePalast Manager", "assets", "posters" if img_type == "poster" else "banners")
+                else:
+                    folder = os.path.join(self.get_app_dir(), "assets", "posters" if img_type == "poster" else "banners")
                 
             os.makedirs(folder, exist_ok=True)
             dest_path = os.path.join(folder, unique_name)

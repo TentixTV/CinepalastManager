@@ -53,6 +53,10 @@ def main():
     # 2. Initialize SQLite Database
     database.initialize_db()
     
+    # 3. Ensure FSK logo assets are downloaded
+    import main as main_module
+    main_module.ensure_fsk_icons()
+    
     # 2. Find a free port and start the local Bottle server
     port = get_free_port()
     

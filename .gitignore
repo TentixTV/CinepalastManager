@@ -32,3 +32,9 @@ build/
 dist/
 *.spec
 *.exe
+
+# Temp/Agent files
+scratch/
+.agents/
+server_test.log
+test.db

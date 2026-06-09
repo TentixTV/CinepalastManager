@@ -5,7 +5,7 @@
 ; Eindeutige ID für die App
 AppId={{5E583391-766F-48A0-A7EA-918991D4C63E}
 AppName=CinePalast Manager
-AppVersion=1.0
+AppVersion=2.0
 AppPublisher=Mannis Kinopalast
 DefaultDirName={localappdata}\CinePalast Manager
 DefaultGroupName=CinePalast Manager
@@ -28,6 +28,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 ; Hauptanwendung kopieren
 Source: "dist\CinePalast.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Version metadata kopieren
+Source: "version.json"; DestDir: "{app}"; Flags: ignoreversion
 ; Standard-App-Icon kopieren
 Source: "assets\DTB.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 ; FSK Icons kopieren (falls beim Build vorhanden)

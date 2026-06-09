@@ -102,31 +102,46 @@
         <div class="modal-container glass movie-detail-card">
             <button class="modal-close" onclick="closeModal('modal-details')">&times;</button>
             
-            <div class="detail-banner-area">
+            <div class="detail-banner-area" id="detail-banner-container">
                 <img id="detail-banner" src="" alt="Banner" class="detail-banner-img">
                 <div class="detail-banner-overlay"></div>
-                <div class="detail-header-text">
-                    <h1 id="detail-title">Filmtitel</h1>
-                    <p id="detail-tagline"></p>
+                
+                <!-- Center upload placeholder when banner is empty -->
+                <div id="detail-banner-placeholder" style="display: none; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: calc(100% - 30px); height: calc(100% - 30px); cursor: pointer; border: 2px dashed rgba(255,255,255,0.15); border-radius: 12px; margin: 15px; box-sizing: border-box; background: rgba(255,255,255,0.01); transition: var(--transition-fast);">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent);"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    <span style="font-size: 13px; color: var(--text-secondary); font-weight: 600;">Banner hinzufügen (Bild oder GIF)</span>
                 </div>
-                <button id="btn-download-banner" class="btn btn-secondary" style="position: absolute; top: 15px; right: 60px; font-size: 11px; padding: 6px 12px; z-index: 10; background: rgba(10,10,15,0.7); border-color: var(--accent);">
-                    📥 Banner speichern
+
+                <button id="btn-download-banner" class="btn btn-secondary" style="position: absolute; top: 15px; right: 20px; font-size: 11px; padding: 6px 12px; z-index: 10; background: rgba(10,10,15,0.7); border-color: var(--accent); display: inline-flex; align-items: center; gap: 6px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Banner speichern
+                </button>
+                <button id="btn-change-banner" class="btn btn-secondary" style="position: absolute; top: 15px; left: 20px; font-size: 11px; padding: 6px 12px; z-index: 10; background: rgba(10,10,15,0.7); border-color: var(--accent); display: inline-flex; align-items: center; gap: 6px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                    Banner hochladen
                 </button>
             </div>
 
             <div class="detail-content-area">
                 <div class="detail-poster-col">
                     <img id="detail-poster" src="" alt="Poster" class="detail-poster-img shadow-lg">
-                    <button id="btn-download-poster" class="btn btn-secondary" style="width: 100%; margin-top: 10px; font-size: 11px; padding: 6px 12px; border-color: var(--accent);">
-                        📥 Poster speichern
+                    <button id="btn-download-poster" class="btn btn-secondary" style="width: 100%; margin-top: 10px; font-size: 11px; padding: 6px 12px; border-color: var(--accent); display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Poster speichern
                     </button>
                 </div>
                 
                 <div class="detail-info-col">
-                    <div class="detail-meta-row">
+                    <div class="detail-header-text-static" style="margin-bottom: 12px;">
+                        <h1 id="detail-title" style="font-size: 26px; font-weight: 800; color: var(--text-primary);">Filmtitel</h1>
+                        <p id="detail-tagline" style="font-size: 13px; color: var(--accent); font-weight: 600; margin-top: 2px;"></p>
+                    </div>
+
+                    <div class="detail-meta-row" style="align-items: center;">
                         <span id="detail-year" class="meta-tag">Jahr: -</span>
                         <span id="detail-runtime" class="meta-tag">Laufzeit: - min</span>
                         <span id="detail-fsk" class="meta-tag FSK">FSK: -</span>
+                        <img id="detail-fsk-logo" src="" alt="FSK" style="display: none; height: 24px; vertical-align: middle; border-radius: 4px;">
                         <span id="detail-country" class="meta-tag">Land: -</span>
                     </div>
 
@@ -164,9 +179,19 @@
                         <p id="detail-voices" class="selectable-text"></p>
                     </div>
 
+                    <!-- Customizable Discord description box -->
+                    <div id="discord-preview-block" class="detail-block" style="margin-top: 15px; display: none;">
+                        <h3 style="display: flex; align-items: center; gap: 6px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                            Discord Beschreibung bearbeiten
+                        </h3>
+                        <textarea id="discord-description-input" class="glass-input" rows="6" style="width: 100%; resize: vertical; font-family: monospace; font-size: 12px; line-height: 1.4; background: rgba(10, 10, 15, 0.85); color: var(--text-primary); border-color: rgba(255, 255, 255, 0.1); margin-top: 6px;"></textarea>
+                    </div>
+
                     <div class="detail-footer-actions">
-                        <button id="btn-copy-discord" class="btn btn-primary btn-glow" style="background: #5865F2; color: white; border: none; box-shadow: 0 0 12px rgba(88, 101, 242, 0.4);">
-                            📋 Discord-Text kopieren
+                        <button id="btn-copy-discord" class="btn btn-primary btn-glow" style="background: #5865F2; color: white; border: none; box-shadow: 0 0 12px rgba(88, 101, 242, 0.4); display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            Discord-Text kopieren
                         </button>
                         <button id="btn-delete-current" class="btn btn-danger">Löschen</button>
                     </div>
@@ -243,6 +268,10 @@
                     <div class="credits">
                         <span>Creator: ®TENTIX LLC</span>
                         <span>Founder: Martin K.</span>
+                        <a href="#" id="link-show-cert" style="color: var(--accent); text-decoration: none; font-weight: 600; margin-top: 6px; display: inline-flex; align-items: center; gap: 4px;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align: middle;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v8"/><path d="M9 11l3 3 3-3"/></svg>
+                            Zertifikat anzeigen
+                        </a>
                     </div>
                     <div class="action-buttons">
                         <button type="button" class="btn btn-secondary" onclick="closeModal('modal-settings')">Abbrechen</button>
@@ -407,6 +436,50 @@
             <div class="form-footer" style="margin-top: 20px; justify-content: flex-end; gap: 10px;">
                 <button type="button" id="btn-confirm-cancel" class="btn btn-secondary">Abbrechen</button>
                 <button type="button" id="btn-confirm-ok" class="btn btn-primary btn-glow">Bestätigen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Certificate Modal -->
+    <div id="modal-certificate" class="modal-overlay">
+        <div class="modal-container glass certificate-card" style="width: 520px; padding: 40px; border: 2px solid rgba(212, 175, 55, 0.4); background: linear-gradient(135deg, rgba(20, 20, 30, 0.95) 0%, rgba(10, 10, 15, 0.98) 100%); text-align: center; box-shadow: 0 0 40px rgba(212, 175, 55, 0.15); border-radius: 20px;">
+            <button class="modal-close" onclick="closeModal('modal-certificate')">&times;</button>
+            
+            <!-- Glowing Seal/Badge -->
+            <div class="certificate-seal" style="margin-bottom: 24px; display: inline-block;">
+                <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="1.5" style="filter: drop-shadow(0 0 8px rgba(212,175,55,0.5));">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    <path d="M12 8v8"/>
+                    <path d="M9 11l3 3 3-3"/>
+                </svg>
+            </div>
+            
+            <h2 style="font-family: 'Outfit', sans-serif; font-size: 20px; font-weight: 800; color: #D4AF37; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px;">Software-Zertifikat</h2>
+            <p style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Offiziell verifiziert & lizenziert</p>
+            
+            <div style="border-top: 1px solid rgba(212, 175, 55, 0.2); border-bottom: 1px solid rgba(212, 175, 55, 0.2); padding: 24px 0; margin: 24px 0; font-family: 'Outfit', sans-serif;">
+                <p style="font-size: 12px; color: var(--text-secondary);">Dieses Produkt wird offiziell herausgegeben und unterstützt von:</p>
+                <p style="font-size: 24px; font-weight: 800; color: var(--text-primary); margin: 10px 0; letter-spacing: 1px;">®TENTIX LLC</p>
+                
+                <div style="display: flex; justify-content: center; gap: 40px; margin-top: 20px;">
+                     <div>
+                         <p style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;">Gründer & Inhaber</p>
+                         <p style="font-size: 14px; font-weight: 600; color: var(--text-primary);">Martin K.</p>
+                     </div>
+                     <div>
+                         <p style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;">Software Version</p>
+                         <p style="font-size: 14px; font-weight: 600; color: var(--accent);">V2.0.0 (Release)</p>
+                     </div>
+                </div>
+            </div>
+            
+            <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 16px;">
+                <p>Zertifikats-ID: <span style="font-family: monospace; font-weight: 600; color: var(--text-primary);">TENTIX-CP-V2-2026-MK</span></p>
+                <p>Status: <span style="color: #10B981; font-weight: 600; text-shadow: 0 0 8px rgba(16,185,129,0.3);">AKTIV & VERIFIZIERT</span></p>
+            </div>
+            
+            <div style="margin-top: 30px;">
+                <button class="btn btn-secondary" style="border-color: #D4AF37; color: #D4AF37;" onclick="closeModal('modal-certificate')">Schließen</button>
             </div>
         </div>
     </div>

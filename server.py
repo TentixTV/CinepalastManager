@@ -45,6 +45,15 @@ def serve_banner(filename):
             
     return bottle.static_file(filename, root=os.path.join(get_app_dir(), "assets/banners"))
 
+@bottle.route('/assets/fsk/<filename>')
+def serve_fsk(filename):
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if local_appdata:
+        folder = os.path.join(local_appdata, "CinePalast Manager", "assets", "fsk")
+        if os.path.exists(os.path.join(folder, filename)):
+            return bottle.static_file(filename, root=folder)
+    return bottle.static_file(filename, root=os.path.join(get_app_dir(), "assets/fsk"))
+
 
 
 def run_server(port):
@@ -254,9 +263,18 @@ def api_credits():
             except Exception:
                 pass
                 
+    if not version_data:
+        version_file = os.path.join(get_app_dir(), "version.json")
+        if os.path.exists(version_file):
+            try:
+                with open(version_file, "r", encoding="utf-8") as f:
+                    version_data = json.load(f)
+            except Exception:
+                pass
+                
     creator = version_data.get("creator", "®TENTIX LLC")
     founder = version_data.get("founder", "Martin K.")
-    version = version_data.get("version", "1.0.0")
+    version = version_data.get("version", "2.0.0")
     
     import html
     escaped_creator = html.escape(creator)

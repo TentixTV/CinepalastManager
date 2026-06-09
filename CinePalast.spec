@@ -7,6 +7,7 @@ a = Analysis(
     datas=[
         ('frontend', 'frontend'),
         ('assets/DTB.png', 'assets'),
+        ('assets/fsk', 'assets/fsk'),
         ('icon.ico', '.')
     ],
     hiddenimports=['clr', 'comtypes'],

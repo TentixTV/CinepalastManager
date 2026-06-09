@@ -178,6 +178,15 @@ function bindEvents() {
             downloadBanner(appState.currentMovie);
         }
     });
+
+    // Show certificate modal link
+    const showCertLink = document.getElementById('link-show-cert');
+    if (showCertLink) {
+        showCertLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            openModal('modal-certificate');
+        });
+    }
 }
 
 // --- Loading indicator ---
@@ -556,7 +565,12 @@ function createMovieCard(movie) {
     if (movie.isOnline) {
         const overlay = document.createElement('div');
         overlay.className = 'import-overlay';
-        overlay.innerHTML = `<button class="btn btn-primary btn-glow btn-import-card">Importieren</button>`;
+        overlay.innerHTML = `
+            <button class="btn btn-primary btn-glow btn-import-card" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Importieren
+            </button>
+        `;
         overlay.querySelector('.btn-import-card').addEventListener('click', (e) => {
             e.stopPropagation();
             importMovie(movie.tmdb_id, movie.Name);
@@ -611,8 +625,9 @@ function createMovieRow(movie, displayIndex) {
         <td>
             <div class="table-actions">
                 ${movie.isOnline ? `
-                    <button class="table-action-btn import-row-btn" style="color: var(--accent); font-weight: bold; border: 1px solid var(--accent); border-radius: 4px; padding: 2px 6px;">
-                        📥 Import
+                    <button class="table-action-btn import-row-btn" style="color: var(--accent); font-weight: bold; border: 1px solid var(--accent); border-radius: 4px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 4px;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Import
                     </button>
                 ` : `
                     <button class="table-action-btn delete-row-btn" title="Löschen">
@@ -689,11 +704,21 @@ function showMovieDetails(movie) {
     document.getElementById('detail-runtime').innerText = `Laufzeit: ${movie.Laufzeit_min || '-'} min`;
     
     const fskTag = document.getElementById('detail-fsk');
-    if (movie.FSK) {
+    const fskLogo = document.getElementById('detail-fsk-logo');
+    const validFsks = ["0", "6", "12", "16", "18"];
+    let fskStr = movie.FSK ? String(movie.FSK).replace("FSK", "").trim() : "";
+    
+    if (fskStr && validFsks.includes(fskStr)) {
+        fskLogo.src = `/assets/fsk/fsk${fskStr}.png`;
+        fskLogo.style.display = 'inline-block';
+        fskTag.style.display = 'none';
+    } else if (movie.FSK) {
         fskTag.innerText = `FSK ${movie.FSK}`;
         fskTag.style.display = 'inline-block';
+        fskLogo.style.display = 'none';
     } else {
         fskTag.style.display = 'none';
+        fskLogo.style.display = 'none';
     }
     
     document.getElementById('detail-country').innerText = `Land: ${movie.Produktionsland || 'k.A.'}`;
@@ -708,6 +733,17 @@ function showMovieDetails(movie) {
     // Banner and Poster URLs
     const bannerEl = document.getElementById('detail-banner');
     const btnDownloadBanner = document.getElementById('btn-download-banner');
+    const btnChangeBanner = document.getElementById('btn-change-banner');
+    const bannerPlaceholder = document.getElementById('detail-banner-placeholder');
+    const bannerContainer = document.getElementById('detail-banner-container');
+    
+    // Clear old event listeners by cloning
+    const newChangeBanner = btnChangeBanner.cloneNode(true);
+    btnChangeBanner.parentNode.replaceChild(newChangeBanner, btnChangeBanner);
+    
+    const newPlaceholder = bannerPlaceholder.cloneNode(true);
+    bannerPlaceholder.parentNode.replaceChild(newPlaceholder, bannerPlaceholder);
+
     if (movie.Banner_Pfad) {
         const isTmdbPath = movie.Banner_Pfad.startsWith('/') && !movie.Banner_Pfad.includes(':/') && !movie.Banner_Pfad.includes('assets/') && !movie.Banner_Pfad.startsWith('/media/');
         if (isTmdbPath) {
@@ -715,12 +751,33 @@ function showMovieDetails(movie) {
         } else {
             bannerEl.src = getMediaUrl(movie.Banner_Pfad);
         }
+        
         bannerEl.style.display = 'block';
+        newPlaceholder.style.display = 'none';
+        bannerContainer.style.display = 'flex';
+        
         btnDownloadBanner.style.display = movie.isOnline ? 'none' : 'block';
+        newChangeBanner.style.display = movie.isOnline ? 'none' : 'block';
+        
+        if (!movie.isOnline) {
+            newChangeBanner.addEventListener('click', () => changeBanner(movie));
+        }
     } else {
         bannerEl.src = '';
         bannerEl.style.display = 'none';
-        btnDownloadBanner.style.display = 'none';
+        
+        if (movie.isOnline) {
+            bannerContainer.style.display = 'none';
+            btnDownloadBanner.style.display = 'none';
+            newChangeBanner.style.display = 'none';
+            newPlaceholder.style.display = 'none';
+        } else {
+            bannerContainer.style.display = 'flex';
+            newPlaceholder.style.display = 'flex';
+            btnDownloadBanner.style.display = 'none';
+            newChangeBanner.style.display = 'none';
+            newPlaceholder.addEventListener('click', () => changeBanner(movie));
+        }
     }
 
     const posterEl = document.getElementById('detail-poster');
@@ -740,12 +797,23 @@ function showMovieDetails(movie) {
         btnDownloadPoster.style.display = 'none';
     }
 
+    // Discord description textarea
+    const discordPreviewBlock = document.getElementById('discord-preview-block');
+    const discordInput = document.getElementById('discord-description-input');
+    if (!movie.isOnline) {
+        discordInput.value = generateDiscordText(movie);
+        discordPreviewBlock.style.display = 'block';
+    } else {
+        discordPreviewBlock.style.display = 'none';
+    }
+
     // Configure footer actions
     const footerActions = document.querySelector('.detail-footer-actions');
     if (movie.isOnline) {
         footerActions.innerHTML = `
-            <button id="btn-import-current" class="btn btn-primary btn-glow" style="width: 100%;">
-                📥 Film importieren
+            <button id="btn-import-current" class="btn btn-primary btn-glow" style="width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Film importieren
             </button>
         `;
         document.getElementById('btn-import-current').addEventListener('click', () => {
@@ -753,13 +821,14 @@ function showMovieDetails(movie) {
         });
     } else {
         footerActions.innerHTML = `
-            <button id="btn-copy-discord" class="btn btn-primary btn-glow" style="background: #5865F2; color: white; border: none; box-shadow: 0 0 12px rgba(88, 101, 242, 0.4);">
-                📋 Discord-Text kopieren
+            <button id="btn-copy-discord" class="btn btn-primary btn-glow" style="background: #5865F2; color: white; border: none; box-shadow: 0 0 12px rgba(88, 101, 242, 0.4); display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Discord-Text kopieren
             </button>
             <button id="btn-delete-current" class="btn btn-danger">Löschen</button>
         `;
         document.getElementById('btn-copy-discord').addEventListener('click', () => {
-            copyDiscordText(movie);
+            copyEditedDiscordText();
         });
         document.getElementById('btn-delete-current').addEventListener('click', () => {
             deleteMovie(movie.ID);
@@ -922,6 +991,23 @@ async function copyDiscordText(movie) {
     }
 }
 
+async function copyEditedDiscordText() {
+    const text = document.getElementById('discord-description-input').value;
+    try {
+        await navigator.clipboard.writeText(text);
+        showCustomAlert("Die Discord-Beschreibung wurde erfolgreich in Ihre Zwischenablage kopiert!", "Discord-Text kopiert");
+    } catch (err) {
+        console.error('Failed to copy text: ', err);
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showCustomAlert("Die Discord-Beschreibung wurde erfolgreich kopiert!", "Discord-Text kopiert");
+    }
+}
+
 // --- Save Poster/Banner to Desktop ---
 async function downloadPoster(movie) {
     if (!movie.Poster_Pfad) return;
@@ -953,6 +1039,37 @@ async function downloadBanner(movie) {
         }
     } catch (e) {
         console.error(e);
+        hideLoading();
+    }
+}
+
+async function changeBanner(movie) {
+    try {
+        const filePath = await pywebview.api.select_image_file();
+        if (filePath) {
+            showLoading("Kopiere Banner...");
+            const res = await pywebview.api.copy_image_to_media(filePath, 'banner');
+            hideLoading();
+            
+            if (res.success) {
+                showLoading("Speichere Banner...");
+                const dbRes = await pywebview.api.update_movie(movie.ID, { "Banner_Pfad": res.path });
+                hideLoading();
+                
+                if (dbRes.success) {
+                    showCustomAlert("Das Filmbanner wurde erfolgreich aktualisiert!", "Erfolg");
+                    movie.Banner_Pfad = res.path;
+                    await refreshMovies();
+                    showMovieDetails(movie);
+                } else {
+                    showCustomAlert("Fehler beim Speichern in der Datenbank: " + dbRes.error, "Fehler");
+                }
+            } else {
+                showCustomAlert("Fehler beim Kopieren des Bildes: " + res.error, "Fehler");
+            }
+        }
+    } catch (e) {
+        console.error("Change banner error:", e);
         hideLoading();
     }
 }
