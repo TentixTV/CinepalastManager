@@ -6,7 +6,53 @@ import re
 from bs4 import BeautifulSoup
 from typing import List, Dict, Optional
 
-CONFIG_FILE = "config.json"
+import sys
+
+def get_app_dir() -> str:
+    """Returns absolute path to the application directory."""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+def get_config_path() -> str:
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if local_appdata:
+        cfg_dir = os.path.join(local_appdata, "CinePalast Manager")
+        os.makedirs(cfg_dir, exist_ok=True)
+        cfg_path = os.path.join(cfg_dir, "config.json")
+        
+        # 1. If config already exists in AppData, use it
+        if os.path.exists(cfg_path):
+            return cfg_path
+            
+        # 2. Check old V2 location in AppData (under 'app' subfolder)
+        old_v2_cfg = os.path.join(local_appdata, "CinePalast Manager", "app", "config.json")
+        if os.path.exists(old_v2_cfg):
+            try:
+                import shutil
+                shutil.copy2(old_v2_cfg, cfg_path)
+                try:
+                    os.remove(old_v2_cfg)
+                except Exception:
+                    pass
+                return cfg_path
+            except Exception as e:
+                print("Error migrating old V2 config to AppData:", e)
+                
+        # 3. Check application executable directory
+        app_cfg = os.path.join(get_app_dir(), "config.json")
+        if os.path.exists(app_cfg):
+            try:
+                import shutil
+                shutil.copy2(app_cfg, cfg_path)
+                return cfg_path
+            except Exception as e:
+                print("Error migrating config from app folder to AppData:", e)
+                
+        return cfg_path
+    return "config.json"
+
+CONFIG_FILE = get_config_path()
 
 def load_config() -> dict:
     """Loads the config dictionary from config.json. Returns default config if the file does not exist."""
@@ -190,147 +236,152 @@ class TMDBClient:
                 print(f"API search failed (falling back to web scraping): {e}")
 
         # Web Scraper Fallback (no API Key required)
-        escaped_query = urllib.parse.quote(query)
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
-        }
-        
-        if search_filter in ["Schauspieler", "Regisseur"]:
-            search_url = f"https://www.themoviedb.org/search/person?query={escaped_query}"
-            response = requests.get(search_url, headers=headers, timeout=10)
-            response.raise_for_status()
+        try:
+            escaped_query = urllib.parse.quote(query)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
+            }
             
-            soup = BeautifulSoup(response.text, 'html.parser')
-            person_id = None
-            for a in soup.find_all("a", href=True):
-                href = a["href"]
-                match = re.search(r'^/person/(\d+)', href)
-                if match:
-                    person_id = match.group(1)
-                    break
-                    
-            if not person_id:
-                return []
+            if search_filter in ["Schauspieler", "Regisseur"]:
+                search_url = f"https://www.themoviedb.org/search/person?query={escaped_query}"
+                response = requests.get(search_url, headers=headers, timeout=10)
+                response.raise_for_status()
                 
-            person_url = f"https://www.themoviedb.org/person/{person_id}"
-            resp = requests.get(person_url, headers=headers, timeout=10)
-            resp.raise_for_status()
-            person_soup = BeautifulSoup(resp.text, 'html.parser')
-            
-            target_heading = "Darsteller" if search_filter == "Schauspieler" else "Regie"
-            results = []
-            found_table = False
-            
-            for h3 in person_soup.find_all("h3"):
-                if h3.text.strip() == target_heading:
-                    table = h3.find_next_sibling("table")
-                    if table:
-                        found_table = True
-                        for row in table.find_all("table", class_="credit_group"):
-                            year_td = row.find("td", class_="year")
-                            year = year_td.text.strip() if year_td else "k.A."
-                            if not year or year == "—":
-                                year = "k.A."
-                            else:
-                                year_match = re.search(r'\b(19\d\d|20\d\d)\b', year)
-                                if year_match:
-                                    year = year_match.group(1)
-                                else:
-                                    year = "k.A."
-                            
-                            role_td = row.find("td", class_="role")
-                            if role_td:
-                                link = role_td.find("a", href=True)
-                                if link:
-                                    m_href = link["href"]
-                                    m_match = re.search(r'^/movie/(\d+)', m_href)
-                                    if m_match:
-                                        tmdb_id = int(m_match.group(1))
-                                        title = link.text.strip()
-                                        results.append({
-                                            "tmdb_id": tmdb_id,
-                                            "titel": title,
-                                            "original_titel": title,
-                                            "jahr": year,
-                                            "poster_path": ""
-                                        })
+                soup = BeautifulSoup(response.text, 'html.parser')
+                person_id = None
+                for a in soup.find_all("a", href=True):
+                    href = a["href"]
+                    match = re.search(r'^/person/(\d+)', href)
+                    if match:
+                        person_id = match.group(1)
                         break
                         
-            # Fallback to general links if specific table not found
-            if not found_table:
+                if not person_id:
+                    return []
+                    
+                person_url = f"https://www.themoviedb.org/person/{person_id}"
+                resp = requests.get(person_url, headers=headers, timeout=10)
+                resp.raise_for_status()
+                person_soup = BeautifulSoup(resp.text, 'html.parser')
+                
+                target_heading = "Darsteller" if search_filter == "Schauspieler" else "Regie"
+                results = []
+                found_table = False
+                
+                for h3 in person_soup.find_all("h3"):
+                    if h3.text.strip() == target_heading:
+                        table = h3.find_next_sibling("table")
+                        if table:
+                            found_table = True
+                            for credit_table in table.find_all("table", class_="credit_group"):
+                                year_td = credit_table.find("td", class_="year")
+                                year = year_td.text.strip() if year_td else "k.A."
+                                if not year or year == "—":
+                                    year = "k.A."
+                                else:
+                                    year_match = re.search(r'\b(19\d\d|20\d\d)\b', year)
+                                    if year_match:
+                                        year = year_match.group(1)
+                                    else:
+                                        year = "k.A."
+                                
+                                for row in credit_table.find_all("tr"):
+                                    role_td = row.find("td", class_="role")
+                                    if role_td:
+                                        link = role_td.find("a", href=True)
+                                        if link:
+                                            m_href = link["href"]
+                                            m_match = re.search(r'^/movie/(\d+)', m_href)
+                                            if m_match:
+                                                tmdb_id = int(m_match.group(1))
+                                                title = link.text.strip()
+                                                results.append({
+                                                    "tmdb_id": tmdb_id,
+                                                    "titel": title,
+                                                    "original_titel": title,
+                                                    "jahr": year,
+                                                    "poster_path": ""
+                                                })
+                            break
+                            
+                # Fallback to general links if specific table not found
+                if not found_table:
+                    seen = set()
+                    for a in person_soup.find_all("a", href=True):
+                        m_href = a["href"]
+                        m_match = re.search(r'^/movie/(\d+)', m_href)
+                        if m_match:
+                            tmdb_id = int(m_match.group(1))
+                            if tmdb_id not in seen:
+                                seen.add(tmdb_id)
+                                title = a.text.strip()
+                                if title:
+                                    results.append({
+                                        "tmdb_id": tmdb_id,
+                                        "titel": title,
+                                        "original_titel": title,
+                                        "jahr": "k.A.",
+                                        "poster_path": ""
+                                    })
+                                    
+                # De-duplicate results
                 seen = set()
-                for a in person_soup.find_all("a", href=True):
-                    m_href = a["href"]
-                    m_match = re.search(r'^/movie/(\d+)', m_href)
-                    if m_match:
-                        tmdb_id = int(m_match.group(1))
-                        if tmdb_id not in seen:
-                            seen.add(tmdb_id)
-                            title = a.text.strip()
-                            if title:
-                                results.append({
-                                    "tmdb_id": tmdb_id,
-                                    "titel": title,
-                                    "original_titel": title,
-                                    "jahr": "k.A.",
-                                    "poster_path": ""
-                                })
-                                
-            # De-duplicate results
-            seen = set()
-            unique_results = []
-            for r in results:
-                if r["tmdb_id"] not in seen:
-                    seen.add(r["tmdb_id"])
-                    unique_results.append(r)
-            return unique_results
-            
-        else:
-            url = f"https://www.themoviedb.org/search?query={escaped_query}"
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
-            
-            soup = BeautifulSoup(response.text, 'html.parser')
-            cards = soup.find_all("div", class_="comp:media-card")
-            
-            results = []
-            for card in cards:
-                link = card.find("a", href=True)
-                if link:
-                    href = link["href"]
-                    match = re.search(r'^/movie/(\d+)', href)
-                    if match:
-                        tmdb_id = int(match.group(1))
-                        
-                        title_el = card.find("h2")
-                        title = title_el.text.strip() if title_el else ""
-                        if not title:
-                            title = link.text.strip()
+                unique_results = []
+                for r in results:
+                    if r["tmdb_id"] not in seen:
+                        seen.add(r["tmdb_id"])
+                        unique_results.append(r)
+                return unique_results
+                
+            else:
+                url = f"https://www.themoviedb.org/search?query={escaped_query}"
+                response = requests.get(url, headers=headers, timeout=10)
+                response.raise_for_status()
+                
+                soup = BeautifulSoup(response.text, 'html.parser')
+                cards = soup.find_all("div", class_="comp:media-card")
+                
+                results = []
+                for card in cards:
+                    link = card.find("a", href=True)
+                    if link:
+                        href = link["href"]
+                        match = re.search(r'^/movie/(\d+)', href)
+                        if match:
+                            tmdb_id = int(match.group(1))
                             
-                        year_el = card.find("span", class_="release_date")
-                        year_str = year_el.text.strip() if year_el else ""
-                        year = None
-                        year_match = re.search(r'\b(19\d\d|20\d\d)\b', year_str)
-                        if year_match:
-                            year = int(year_match.group(1))
-                            
-                        poster_path = ""
-                        img = card.find("img")
-                        if img:
-                            src = img.get("src") or img.get("data-src") or ""
-                            img_match = re.search(r'/t/p/w[^/]+/([^/]+\.(?:jpg|png|webp|jpeg))', src)
-                            if img_match:
-                                poster_path = "/" + img_match.group(1)
+                            title_el = card.find("h2")
+                            title = title_el.text.strip() if title_el else ""
+                            if not title:
+                                title = link.text.strip()
                                 
-                        results.append({
-                            "tmdb_id": tmdb_id,
-                            "titel": title,
-                            "original_titel": title,
-                            "jahr": year if year else "k.A.",
-                            "poster_path": poster_path
-                        })
-            return results
+                            year_el = card.find("span", class_="release_date")
+                            year_str = year_el.text.strip() if year_el else ""
+                            year = None
+                            year_match = re.search(r'\b(19\d\d|20\d\d)\b', year_str)
+                            if year_match:
+                                year = int(year_match.group(1))
+                                
+                            poster_path = ""
+                            img = card.find("img")
+                            if img:
+                                src = img.get("src") or img.get("data-src") or ""
+                                img_match = re.search(r'/t/p/w[^/]+/([^/]+\.(?:jpg|png|webp|jpeg))', src)
+                                if img_match:
+                                    poster_path = "/" + img_match.group(1)
+                                    
+                            results.append({
+                                "tmdb_id": tmdb_id,
+                                "titel": title,
+                                "original_titel": title,
+                                "jahr": year if year else "k.A.",
+                                "poster_path": poster_path
+                            })
+                return results
+        except Exception as e:
+            print(f"Web scraper fallback failed: {e}")
+            return []
 
     def scrape_synchronsprecher(self, title: str, year: Optional[int] = None) -> str:
         """

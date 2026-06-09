@@ -16,8 +16,41 @@ def get_free_port():
     s.close()
     return port
 
+def migrate_old_v2_assets():
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if not local_appdata:
+        return
+        
+    old_app_dir = os.path.join(local_appdata, "CinePalast Manager", "app")
+    new_app_dir = os.path.join(local_appdata, "CinePalast Manager")
+    
+    if os.path.exists(old_app_dir) and os.path.isdir(old_app_dir):
+        import shutil
+        # Migrate posters and banners
+        for sub in ["posters", "banners"]:
+            old_sub = os.path.join(old_app_dir, "assets", sub)
+            new_sub = os.path.join(new_app_dir, "assets", sub)
+            if os.path.exists(old_sub) and os.path.isdir(old_sub):
+                os.makedirs(new_sub, exist_ok=True)
+                for item in os.listdir(old_sub):
+                    src = os.path.join(old_sub, item)
+                    dest = os.path.join(new_sub, item)
+                    if os.path.isfile(src) and not os.path.exists(dest):
+                        try:
+                            shutil.copy2(src, dest)
+                        except Exception as e:
+                            print(f"Error migrating asset {item}: {e}")
+        # Clean up old app dir
+        try:
+            shutil.rmtree(old_app_dir)
+        except Exception:
+            pass
+
 def main():
-    # 1. Initialize SQLite Database
+    # 1. Migrate old V2 assets if upgrade occurred
+    migrate_old_v2_assets()
+    
+    # 2. Initialize SQLite Database
     database.initialize_db()
     
     # 2. Find a free port and start the local Bottle server
@@ -66,7 +99,7 @@ def main():
     
     # 6. Start the native webview window loop
     # On Windows, pywebview automatically loads WebView2 (Edge Chromium-based)
-    webview.start()
+    webview.start(debug=True)
 
 if __name__ == '__main__':
     # Make sure execution directory is correct

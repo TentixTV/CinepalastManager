@@ -26,6 +26,45 @@ const dom = {
     loadingText: document.getElementById('loading-text')
 };
 
+// --- Custom Dialog Modal Helpers ---
+function showCustomAlert(message, title = "Hinweis") {
+    document.getElementById('alert-title').innerText = title;
+    document.getElementById('alert-message').innerText = message;
+    openModal('modal-alert');
+}
+
+function showCustomConfirm(message, title = "Bestätigung") {
+    return new Promise((resolve) => {
+        document.getElementById('confirm-title').innerText = title;
+        document.getElementById('confirm-message').innerText = message;
+        
+        const okBtn = document.getElementById('btn-confirm-ok');
+        const cancelBtn = document.getElementById('btn-confirm-cancel');
+        
+        const onOk = () => {
+            closeModal('modal-confirm');
+            cleanup();
+            resolve(true);
+        };
+        
+        const onCancel = () => {
+            closeModal('modal-confirm');
+            cleanup();
+            resolve(false);
+        };
+        
+        const cleanup = () => {
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+        };
+        
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        
+        openModal('modal-confirm');
+    });
+}
+
 // --- Initialization ---
 window.addEventListener('DOMContentLoaded', () => {
     showLoading("Initialisiere CinePalast...");
@@ -72,6 +111,16 @@ function bindEvents() {
         appState.searchQuery = e.target.value;
         toggleClearSearchButton();
         performSearch();
+    });
+
+    // Support pressing Enter key in search to trigger online search if empty
+    dom.searchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (appState.movies.length === 0 && appState.searchQuery.trim().length > 0) {
+                triggerOnlineSearch();
+            }
+        }
     });
 
     // Clear search
@@ -130,6 +179,7 @@ function showLoading(text = "Lade...") {
     dom.loadingOverlay.classList.add('active');
 }
 
+// --- Hide Loading ---
 function hideLoading() {
     dom.loadingOverlay.classList.remove('active');
 }
@@ -375,7 +425,7 @@ async function triggerOnlineSearch() {
         if (matches && matches.length > 0) {
             renderOnlineMatches(matches);
         } else {
-            alert(`Keine Online-Treffer für "${appState.searchQuery}" gefunden.`);
+            showCustomAlert(`Keine Online-Treffer für "${appState.searchQuery}" gefunden.`, "Online Suche");
         }
     } catch (e) {
         console.error("Online search failed:", e);
@@ -490,7 +540,7 @@ async function browseAsset(imgType) {
             if (res.success) {
                 document.getElementById(`form-${imgType}`).value = res.path;
             } else {
-                alert("Fehler beim Kopieren: " + res.error);
+                showCustomAlert("Fehler beim Kopieren: " + res.error, "Kopierfehler");
             }
         }
     } catch (e) {
@@ -537,10 +587,9 @@ async function submitMovieForm(event) {
         if (res.success) {
             closeModal('modal-movie-form');
             await refreshMovies();
-            // If details modal was open for this movie, update details view or close
             closeModal('modal-details');
         } else {
-            alert("Fehler beim Speichern: " + res.error);
+            showCustomAlert("Fehler beim Speichern: " + res.error, "Speicherfehler");
         }
     } catch (e) {
         console.error("Saving movie failed:", e);
@@ -550,7 +599,8 @@ async function submitMovieForm(event) {
 
 // --- Delete movie from database ---
 async function deleteMovie(movieId) {
-    if (!confirm("Möchten Sie diesen Film wirklich dauerhaft löschen?")) return;
+    const confirmed = await showCustomConfirm("Möchten Sie diesen Film wirklich dauerhaft löschen?");
+    if (!confirmed) return;
     
     showLoading("Lösche Film...");
     try {
@@ -560,7 +610,7 @@ async function deleteMovie(movieId) {
             closeModal('modal-details');
             await refreshMovies();
         } else {
-            alert("Fehler beim Löschen: " + res.error);
+            showCustomAlert("Fehler beim Löschen: " + res.error, "Fehler");
         }
     } catch (e) {
         console.error("Deleting failed:", e);
@@ -603,20 +653,18 @@ async function testAPIConnections() {
     if (tmdbKey) {
         try {
             const url = "https://api.themoviedb.org/3/configuration";
-            const headers = tmdbKey.length > 50 || tmdbKey.startswith?.("eyJ") ? 
+            const headers = tmdbKey.length > 50 || tmdbKey.startsWith("eyJ") ? 
                 {"Authorization": `Bearer ${tmdbKey}`} : {};
-            const params = tmdbKey.length > 50 || tmdbKey.startswith?.("eyJ") ? 
+            const params = tmdbKey.length > 50 || tmdbKey.startsWith("eyJ") ? 
                 {} : {"api_key": tmdbKey};
                 
-            // Note: Since JS runs locally, we can make calls using standard fetch!
-            // Wait, fetch Configuration
             const fullUrl = url + (params.api_key ? `?api_key=${params.api_key}` : '');
             const options = headers.Authorization ? { headers } : {};
             const resp = await fetch(fullUrl, options);
             if (resp.status === 200) tmdbOk = true;
         } catch(e) {}
     } else {
-        tmdbOk = true; // No key to test is fine
+        tmdbOk = true; 
     }
 
     // Test GitHub
@@ -633,9 +681,9 @@ async function testAPIConnections() {
     
     hideLoading();
     if (tmdbOk && ghOk) {
-        alert("Verbindungstest erfolgreich!");
+        showCustomAlert("Verbindungstest erfolgreich!", "Verbindungstest");
     } else {
-        alert(`Verbindungstest fehlgeschlagen:\nTMDB: ${tmdbOk ? 'OK' : 'Fehler'}\nGitHub: ${ghOk ? 'OK' : 'Fehler'}`);
+        showCustomAlert(`Verbindungstest fehlgeschlagen:\nTMDB: ${tmdbOk ? 'OK' : 'Fehler'}\nGitHub: ${ghOk ? 'OK' : 'Fehler'}`, "Verbindungstest");
     }
 }
 
@@ -654,14 +702,15 @@ async function saveSettings(event) {
     };
     
     if (newPath !== oldPath) {
-        if (confirm("Sie haben den Speicherpfad geändert. Möchten Sie alle vorhandenen Bilder (Poster & Banner) in das neue Verzeichnis kopieren?")) {
+        const confirmed = await showCustomConfirm("Sie haben den Speicherpfad geändert. Möchten Sie alle vorhandenen Bilder (Poster & Banner) in das neue Verzeichnis kopieren?");
+        if (confirmed) {
             showLoading("Kopiere Mediendateien...");
             const resCopy = await pywebview.api.copy_existing_media_files(newPath);
             hideLoading();
             if (resCopy.success) {
-                alert(`${resCopy.copied} Mediendateien wurden erfolgreich kopiert.`);
+                showCustomAlert(`${resCopy.copied} Mediendateien wurden erfolgreich kopiert.`, "Kopieren abgeschlossen");
             } else {
-                alert("Fehler beim Kopieren der Medien: " + resCopy.error);
+                showCustomAlert("Fehler beim Kopieren der Medien: " + resCopy.error, "Kopierfehler");
             }
         }
     }
@@ -678,7 +727,7 @@ async function saveSettings(event) {
             closeModal('modal-settings');
             await refreshMovies();
         } else {
-            alert("Fehler beim Speichern der Einstellungen: " + res.error);
+            showCustomAlert("Fehler beim Speichern der Einstellungen: " + res.error, "Speicherfehler");
         }
     } catch(e) {
         console.error("Save settings error:", e);
@@ -690,9 +739,9 @@ async function backupDatabase() {
     try {
         const res = await pywebview.api.backup_database();
         if (res.success) {
-            alert("Backup erfolgreich gespeichert unter:\n" + res.path);
+            showCustomAlert("Backup erfolgreich gespeichert unter:\n" + res.path, "Backup erfolgreich");
         } else if (res.error) {
-            alert("Backup fehlgeschlagen: " + res.error);
+            showCustomAlert("Backup fehlgeschlagen: " + res.error, "Backupfehler");
         }
     } catch (e) {
         console.error(e);
@@ -700,18 +749,19 @@ async function backupDatabase() {
 }
 
 async function restoreDatabase() {
-    if (!confirm("ACHTUNG: Beim Laden eines Backups wird die aktuelle Datenbank überschrieben. Fortfahren?")) return;
+    const confirmed = await showCustomConfirm("ACHTUNG: Beim Laden eines Backups wird die aktuelle Datenbank überschrieben. Fortfahren?");
+    if (!confirmed) return;
     
     showLoading("Backup wird geladen...");
     try {
         const res = await pywebview.api.restore_database();
         hideLoading();
         if (res.success) {
-            alert("Datenbank erfolgreich wiederhergestellt!");
+            showCustomAlert("Datenbank erfolgreich wiederhergestellt!", "Erfolg");
             closeModal('modal-settings');
             await refreshMovies();
         } else if (res.error) {
-            alert("Wiederherstellung fehlgeschlagen: " + res.error);
+            showCustomAlert("Wiederherstellung fehlgeschlagen: " + res.error, "Wiederherstellungsfehler");
         }
     } catch(e) {
         console.error(e);
@@ -720,18 +770,19 @@ async function restoreDatabase() {
 }
 
 async function resetDatabase() {
-    if (!confirm("ACHTUNG: Möchten Sie wirklich alle Filme unwiderruflich aus der Datenbank löschen?")) return;
+    const confirmed = await showCustomConfirm("ACHTUNG: Möchten Sie wirklich alle Filme unwiderruflich aus der Datenbank löschen?");
+    if (!confirmed) return;
     
     showLoading("Setze Datenbank zurück...");
     try {
         const res = await pywebview.api.reset_database();
         hideLoading();
         if (res.success) {
-            alert("Datenbank erfolgreich geleert!");
+            showCustomAlert("Datenbank erfolgreich geleert!", "Erfolg");
             closeModal('modal-settings');
             await refreshMovies();
         } else {
-            alert("Fehler: " + res.error);
+            showCustomAlert("Fehler: " + res.error, "Fehler");
         }
     } catch(e) {
         console.error(e);
@@ -743,7 +794,6 @@ async function resetDatabase() {
 function openModal(id) {
     const modal = document.getElementById(id);
     modal.style.display = 'flex';
-    // Small delay to trigger CSS transition
     setTimeout(() => {
         modal.classList.add('active');
     }, 10);

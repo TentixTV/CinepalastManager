@@ -32,14 +32,18 @@ static int callback(void* data, int argc, char** argv, char** azColName) {
 
 int main(int argc, char* argv[]) {
     std::string dbPath = (argc > 1) ? argv[1] : "../CinePalast/cinepalast.db";
+    std::string searchQuery = (argc > 2) ? argv[2] : "";
+    std::string searchFilter = (argc > 3) ? argv[3] : "Alles";
 
     std::cout << "==================================================\n";
     std::cout << "CinePalast Manager \x97 C++ Datenbank Client\n";
     std::cout << "Verbindung mit Datenbank: " << dbPath << "\n";
+    if (!searchQuery.empty()) {
+        std::cout << "Suchbegriff:            \"" << searchQuery << "\" (Filter: " << searchFilter << ")\n";
+    }
     std::cout << "==================================================\n\n";
 
     sqlite3* db;
-    char* zErrMsg = 0;
     int rc;
 
     rc = sqlite3_open(dbPath.c_str(), &db);
@@ -51,7 +55,18 @@ int main(int argc, char* argv[]) {
         std::cout << "Erfolgreich mit der Datenbank verbunden.\n\n";
     }
 
-    std::string sql = "SELECT ID, Name, Jahr, Regisseur, Genre, Schauspieler FROM media ORDER BY Name ASC;";
+    std::string sql;
+    if (searchQuery.empty()) {
+        sql = "SELECT ID, Name, Jahr, Regisseur, Genre, Schauspieler FROM media ORDER BY Name ASC;";
+    } else if (searchFilter == "Film") {
+        sql = "SELECT ID, Name, Jahr, Regisseur, Genre, Schauspieler FROM media WHERE Name LIKE ? OR Filmreihe LIKE ? ORDER BY Name ASC;";
+    } else if (searchFilter == "Schauspieler") {
+        sql = "SELECT ID, Name, Jahr, Regisseur, Genre, Schauspieler FROM media WHERE Schauspieler LIKE ? ORDER BY Name ASC;";
+    } else if (searchFilter == "Regisseur") {
+        sql = "SELECT ID, Name, Jahr, Regisseur, Genre, Schauspieler FROM media WHERE Regisseur LIKE ? ORDER BY Name ASC;";
+    } else {
+        sql = "SELECT ID, Name, Jahr, Regisseur, Genre, Schauspieler FROM media WHERE Name LIKE ? OR Schauspieler LIKE ? OR Genre LIKE ? OR Regisseur LIKE ? OR Filmreihe LIKE ? ORDER BY Name ASC;";
+    }
     
     sqlite3_stmt* stmt;
     rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
@@ -60,6 +75,14 @@ int main(int argc, char* argv[]) {
         std::cerr << "SQL-Fehler beim Vorbereiten: " << sqlite3_errmsg(db) << "\n";
         sqlite3_close(db);
         return 1;
+    }
+
+    if (!searchQuery.empty()) {
+        std::string likeQuery = "%" + searchQuery + "%";
+        int paramCount = sqlite3_bind_parameter_count(stmt);
+        for (int i = 1; i <= paramCount; i++) {
+            sqlite3_bind_text(stmt, i, likeQuery.c_str(), -1, SQLITE_TRANSIENT);
+        }
     }
 
     int count = 0;
@@ -95,7 +118,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (count == 0) {
-        std::cout << "Keine Filme in der Datenbank gefunden.\n";
+        std::cout << "Keine passenden Filme in der Datenbank gefunden.\n";
     } else {
         std::cout << "\nInsgesamt gefundene Filme: " << count << "\n";
     }

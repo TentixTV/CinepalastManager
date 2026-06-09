@@ -7,7 +7,7 @@ AppId={{5E583391-766F-48A0-A7EA-918991D4C63E}
 AppName=CinePalast Manager
 AppVersion=1.0
 AppPublisher=Mannis Kinopalast
-DefaultDirName={localappdata}\CinePalast Manager\app
+DefaultDirName={localappdata}\CinePalast Manager
 DefaultGroupName=CinePalast Manager
 OutputDir=.
 OutputBaseFilename=CinePalastSetup
@@ -33,7 +33,7 @@ Source: "assets\DTB.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 ; FSK Icons kopieren (falls beim Build vorhanden)
 Source: "assets\fsk\*"; DestDir: "{app}\assets\fsk"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 ; Datenbank kopieren
-Source: "cinepalast.db"; DestDir: "{app}"; Flags: ignoreversion
+Source: "cinepalast.db"; DestDir: "{app}"; Flags: onlyifdoesntexist uninsneveruninstall
 ; Gecachte Filmbilder kopieren
 Source: "assets\posters\*"; DestDir: "{app}\assets\posters"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 Source: "assets\banners\*"; DestDir: "{app}\assets\banners"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist

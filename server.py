@@ -1,6 +1,13 @@
 import os
+import sys
 import bottle
 import api
+
+def get_app_dir():
+    """Returns the absolute path to the application directory (works for source and frozen exe)."""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
 
 # Configure static assets routes
 @bottle.route('/media/posters/<filename>')
@@ -11,7 +18,7 @@ def serve_poster(filename):
         folder = os.path.join(custom_path, "posters")
         if os.path.exists(os.path.join(folder, filename)):
             return bottle.static_file(filename, root=folder)
-    return bottle.static_file(filename, root="assets/posters")
+    return bottle.static_file(filename, root=os.path.join(get_app_dir(), "assets/posters"))
 
 @bottle.route('/media/banners/<filename>')
 def serve_banner(filename):
@@ -21,17 +28,14 @@ def serve_banner(filename):
         folder = os.path.join(custom_path, "banners")
         if os.path.exists(os.path.join(folder, filename)):
             return bottle.static_file(filename, root=folder)
-    return bottle.static_file(filename, root="assets/banners")
+    return bottle.static_file(filename, root=os.path.join(get_app_dir(), "assets/banners"))
 
 @bottle.route('/<path:path>')
 def serve_static(path):
-    # Support running from temporary folder in PyInstaller bundle
-    # Wait, we will serve from the frontend folder relative to main.py
     root_dir = os.path.dirname(os.path.abspath(__file__))
     frontend_dir = os.path.join(root_dir, "frontend")
     if not os.path.isdir(frontend_dir):
         # PyInstaller temp directory fallback
-        import sys
         if hasattr(sys, '_MEIPASS'):
             frontend_dir = os.path.join(sys._MEIPASS, "frontend")
             
@@ -42,7 +46,6 @@ def serve_index():
     root_dir = os.path.dirname(os.path.abspath(__file__))
     frontend_dir = os.path.join(root_dir, "frontend")
     if not os.path.isdir(frontend_dir):
-        import sys
         if hasattr(sys, '_MEIPASS'):
             frontend_dir = os.path.join(sys._MEIPASS, "frontend")
             

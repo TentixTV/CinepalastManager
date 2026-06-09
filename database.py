@@ -1,7 +1,52 @@
 import os
 import sqlite3
+import sys
 
-DB_FILE = "cinepalast.db"
+def get_app_dir() -> str:
+    """Returns absolute path to the application directory."""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+def get_db_path() -> str:
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if local_appdata:
+        db_dir = os.path.join(local_appdata, "CinePalast Manager")
+        os.makedirs(db_dir, exist_ok=True)
+        db_path = os.path.join(db_dir, "cinepalast.db")
+        
+        # 1. If database already exists in AppData, use it
+        if os.path.exists(db_path):
+            return db_path
+            
+        # 2. Check old V2 location in AppData (under 'app' subfolder)
+        old_v2_db = os.path.join(local_appdata, "CinePalast Manager", "app", "cinepalast.db")
+        if os.path.exists(old_v2_db):
+            try:
+                import shutil
+                shutil.copy2(old_v2_db, db_path)
+                try:
+                    os.remove(old_v2_db)
+                except Exception:
+                    pass
+                return db_path
+            except Exception as e:
+                print("Error migrating old V2 database to AppData:", e)
+                
+        # 3. Check application executable directory (seeded by installer)
+        app_db = os.path.join(get_app_dir(), "cinepalast.db")
+        if os.path.exists(app_db):
+            try:
+                import shutil
+                shutil.copy2(app_db, db_path)
+                return db_path
+            except Exception as e:
+                print("Error migrating database from app folder to AppData:", e)
+                
+        return db_path
+    return "cinepalast.db"
+
+DB_FILE = get_db_path()
 
 def initialize_db(db_file=DB_FILE):
     """Initializes the SQLite database and creates the 'media' table with all required fields."""

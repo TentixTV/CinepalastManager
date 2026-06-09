@@ -380,6 +380,29 @@
         <p id="loading-text">Lade...</p>
     </div>
 
+    <!-- Custom Dialog Modal -->
+    <div id="modal-alert" class="modal-overlay">
+        <div class="modal-container glass alert-card" style="width: 400px; padding: 24px;">
+            <h2 id="alert-title" class="section-title">Hinweis</h2>
+            <p id="alert-message" style="margin-top: 12px; font-size: 13px; line-height: 1.6; color: var(--text-secondary);"></p>
+            <div class="form-footer" style="margin-top: 20px; justify-content: flex-end;">
+                <button type="button" class="btn btn-primary btn-glow" onclick="closeModal('modal-alert')">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Confirm Modal -->
+    <div id="modal-confirm" class="modal-overlay">
+        <div class="modal-container glass alert-card" style="width: 400px; padding: 24px;">
+            <h2 id="confirm-title" class="section-title">Bestätigung</h2>
+            <p id="confirm-message" style="margin-top: 12px; font-size: 13px; line-height: 1.6; color: var(--text-secondary);"></p>
+            <div class="form-footer" style="margin-top: 20px; justify-content: flex-end; gap: 10px;">
+                <button type="button" id="btn-confirm-cancel" class="btn btn-secondary">Abbrechen</button>
+                <button type="button" id="btn-confirm-ok" class="btn btn-primary btn-glow">Bestätigen</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Core App JS -->
     <script src="app.js"></script>
 </body>

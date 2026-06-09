@@ -34,6 +34,11 @@ namespace CinePalast
 
         public List<MediaItem> GetAllMovies()
         {
+            return SearchMovies(string.Empty, "Alles");
+        }
+
+        public List<MediaItem> SearchMovies(string query, string filter = "Alles")
+        {
             var movies = new List<MediaItem>();
 
             using (var connection = new SqliteConnection(_connectionString))
@@ -41,7 +46,35 @@ namespace CinePalast
                 connection.Open();
 
                 var command = connection.CreateCommand();
-                command.CommandText = "SELECT * FROM media ORDER BY Name ASC;";
+                string sql;
+                string likeQuery = $"%{query}%";
+
+                if (string.IsNullOrWhiteSpace(query))
+                {
+                    sql = "SELECT * FROM media ORDER BY Name ASC;";
+                }
+                else if (filter == "Film")
+                {
+                    sql = "SELECT * FROM media WHERE Name LIKE $query OR Filmreihe LIKE $query ORDER BY Name ASC;";
+                    command.Parameters.AddWithValue("$query", likeQuery);
+                }
+                else if (filter == "Schauspieler")
+                {
+                    sql = "SELECT * FROM media WHERE Schauspieler LIKE $query ORDER BY Name ASC;";
+                    command.Parameters.AddWithValue("$query", likeQuery);
+                }
+                else if (filter == "Regisseur")
+                {
+                    sql = "SELECT * FROM media WHERE Regisseur LIKE $query ORDER BY Name ASC;";
+                    command.Parameters.AddWithValue("$query", likeQuery);
+                }
+                else
+                {
+                    sql = "SELECT * FROM media WHERE Name LIKE $query OR Schauspieler LIKE $query OR Genre LIKE $query OR Regisseur LIKE $query OR Filmreihe LIKE $query ORDER BY Name ASC;";
+                    command.Parameters.AddWithValue("$query", likeQuery);
+                }
+
+                command.CommandText = sql;
 
                 using (var reader = command.ExecuteReader())
                 {
@@ -76,16 +109,22 @@ namespace CinePalast
         public static void Main(string[] args)
         {
             string dbPath = args.Length > 0 ? args[0] : "../CinePalast/cinepalast.db";
+            string searchQuery = args.Length > 1 ? args[1] : string.Empty;
+            string searchFilter = args.Length > 2 ? args[2] : "Alles";
             
             Console.WriteLine("==================================================");
             Console.WriteLine("CinePalast Manager — C# Datenbank Client");
             Console.WriteLine($"Verbindung mit Datenbank: {dbPath}");
+            if (!string.IsNullOrEmpty(searchQuery))
+            {
+                Console.WriteLine($"Suchbegriff:            \"{searchQuery}\" (Filter: {searchFilter})");
+            }
             Console.WriteLine("==================================================");
 
             try
             {
                 var client = new CinePalastClient(dbPath);
-                var movies = client.GetAllMovies();
+                var movies = client.SearchMovies(searchQuery, searchFilter);
 
                 Console.WriteLine($"\nGefundene Filme: {movies.Count}\n");
 

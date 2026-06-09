@@ -3,6 +3,7 @@ import shutil
 import sqlite3
 import webview
 import time
+import sys
 from typing import Optional, Dict, List
 import database
 import api
@@ -14,6 +15,12 @@ class CinePalastAPI:
 
     def set_window(self, window):
         self._window = window
+
+    def get_app_dir(self):
+        """Returns absolute path to the application directory."""
+        if getattr(sys, 'frozen', False):
+            return os.path.dirname(sys.executable)
+        return os.path.dirname(os.path.abspath(__file__))
 
     def get_all_movies(self) -> List[Dict]:
         try:
@@ -65,7 +72,6 @@ class CinePalastAPI:
 
     def update_movie(self, movie_id: int, movie_data: Dict) -> Dict:
         try:
-            # Check if paths need resolving/copying
             database.update_movie_by_id(movie_id, movie_data)
             return {"success": True}
         except Exception as e:
@@ -115,7 +121,7 @@ class CinePalastAPI:
             if custom_path and os.path.isdir(custom_path):
                 folder = os.path.join(custom_path, "posters" if img_type == "poster" else "banners")
             else:
-                folder = "assets/posters" if img_type == "poster" else "assets/banners"
+                folder = os.path.join(self.get_app_dir(), "assets", "posters" if img_type == "poster" else "banners")
                 
             os.makedirs(folder, exist_ok=True)
             dest_path = os.path.join(folder, unique_name)
@@ -136,8 +142,8 @@ class CinePalastAPI:
                 src_dirs.append((os.path.join(old_path, "posters"), "posters"))
                 src_dirs.append((os.path.join(old_path, "banners"), "banners"))
             
-            src_dirs.append(("assets/posters", "posters"))
-            src_dirs.append(("assets/banners", "banners"))
+            src_dirs.append((os.path.join(self.get_app_dir(), "assets", "posters"), "posters"))
+            src_dirs.append((os.path.join(self.get_app_dir(), "assets", "banners"), "banners"))
             
             copied = 0
             for src_dir, sub in src_dirs:
