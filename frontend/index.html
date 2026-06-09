@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CinePalast Manager</title>
+    <!-- Modern Premium Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-cyan">
+    <!-- Dynamic Glow Backgrounds -->
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+
+    <div class="app-container">
+        <!-- Sidebar / Top Panel Navigation -->
+        <header class="app-header glass">
+            <div class="logo-area">
+                <span class="logo-title">CINEPALAST MANAGER</span>
+                <span class="logo-subtitle">Mannis Kinopalast v2.0.0</span>
+            </div>
+
+            <!-- Global Search and Filters Area -->
+            <div class="search-area">
+                <div class="search-input-group">
+                    <select id="search-filter" class="search-filter glass-input">
+                        <option value="Alles">Alles</option>
+                        <option value="Film">Film</option>
+                        <option value="Schauspieler">Schauspieler</option>
+                        <option value="Regisseur">Regisseur</option>
+                    </select>
+                    <input type="text" id="search-input" placeholder="Filmtitel, Cast oder Regisseur suchen..." autocomplete="off" class="search-field glass-input">
+                    <button id="clear-search" class="clear-btn">&times;</button>
+                </div>
+            </div>
+
+            <!-- View Toggle & Main Actions -->
+            <div class="header-actions">
+                <div class="view-toggle glass">
+                    <button id="view-gallery" class="view-btn active" title="Galerie-Ansicht">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    </button>
+                    <button id="view-table" class="view-btn" title="Tabellen-Ansicht">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    </button>
+                </div>
+                <button id="btn-add-movie" class="btn btn-primary btn-glow">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Film hinzufügen
+                </button>
+                <button id="btn-settings" class="btn btn-secondary" title="Einstellungen">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Display Content -->
+        <main class="app-main">
+            <!-- Movie Grid (Gallery Mode) -->
+            <div id="movie-grid" class="movie-grid active">
+                <!-- Rendered dynamically -->
+            </div>
+
+            <!-- Movie Table (Table Mode) -->
+            <div id="movie-table-wrapper" class="movie-table-wrapper">
+                <table class="movie-table glass">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">ID</th>
+                            <th>Titel</th>
+                            <th>Jahr</th>
+                            <th>Regisseur</th>
+                            <th>Genre</th>
+                            <th>Laufzeit</th>
+                            <th>Filmreihe</th>
+                            <th style="width: 80px;">Aktionen</th>
+                        </tr>
+                    </thead>
+                    <tbody id="movie-table-body">
+                        <!-- Rendered dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Empty State -->
+            <div id="empty-state" class="empty-state">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>
+                <p class="empty-title">Keine Filme gefunden</p>
+                <p class="empty-subtitle">Suchen Sie online oder fügen Sie manuell einen neuen Film hinzu.</p>
+                <button id="btn-empty-online-search" class="btn btn-primary btn-glow" style="margin-top: 15px; display: none;">Online suchen</button>
+            </div>
+        </main>
+    </div>
+
+    <!-- ----------------- OVERLAYS / MODALS ----------------- -->
+
+    <!-- Movie Details Modal -->
+    <div id="modal-details" class="modal-overlay">
+        <div class="modal-container glass movie-detail-card">
+            <button class="modal-close" onclick="closeModal('modal-details')">&times;</button>
+            
+            <div class="detail-banner-area">
+                <img id="detail-banner" src="" alt="Banner" class="detail-banner-img">
+                <div class="detail-banner-overlay"></div>
+                <div class="detail-header-text">
+                    <h1 id="detail-title">Filmtitel</h1>
+                    <p id="detail-tagline"></p>
+                </div>
+            </div>
+
+            <div class="detail-content-area">
+                <div class="detail-poster-col">
+                    <img id="detail-poster" src="" alt="Poster" class="detail-poster-img shadow-lg">
+                </div>
+                
+                <div class="detail-info-col">
+                    <div class="detail-meta-row">
+                        <span id="detail-year" class="meta-tag">Jahr: -</span>
+                        <span id="detail-runtime" class="meta-tag">Laufzeit: - min</span>
+                        <span id="detail-fsk" class="meta-tag FSK">FSK: -</span>
+                        <span id="detail-country" class="meta-tag">Land: -</span>
+                    </div>
+
+                    <div class="detail-block">
+                        <h3>Beschreibung</h3>
+                        <p id="detail-description" class="selectable-text"></p>
+                    </div>
+
+                    <div class="detail-grid-info">
+                        <div class="info-item">
+                            <span class="info-label">Regisseur:</span>
+                            <span id="detail-director" class="info-value"></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Filmreihe:</span>
+                            <span id="detail-series" class="info-value"></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Genre:</span>
+                            <span id="detail-genre" class="info-value"></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Produktion:</span>
+                            <span id="detail-studio" class="info-value"></span>
+                        </div>
+                    </div>
+
+                    <div class="detail-block">
+                        <h3>Schauspieler (Cast)</h3>
+                        <p id="detail-cast" class="selectable-text"></p>
+                    </div>
+
+                    <div class="detail-block">
+                        <h3>Deutsche Synchronsprecher</h3>
+                        <p id="detail-voices" class="selectable-text"></p>
+                    </div>
+
+                    <div class="detail-footer-actions">
+                        <button id="btn-edit-current" class="btn btn-secondary">Bearbeiten</button>
+                        <button id="btn-delete-current" class="btn btn-danger">Löschen</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="modal-settings" class="modal-overlay">
+        <div class="modal-container glass settings-card">
+            <button class="modal-close" onclick="closeModal('modal-settings')">&times;</button>
+            <h2 class="section-title">CINEPALAST EINSTELLUNGEN</h2>
+            <p class="section-subtitle">Verwalten Sie Ihre Verbindungen, Designs und lokale Filmdatenbank.</p>
+
+            <form id="settings-form" onsubmit="saveSettings(event)">
+                <!-- Section 1: Keys -->
+                <div class="settings-section">
+                    <h3>API-Verbindungen & Schlüssel</h3>
+                    <div class="form-group">
+                        <label for="settings-tmdb-key">TMDB API-Key / Bearer Token</label>
+                        <input type="password" id="settings-tmdb-key" class="glass-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="settings-github-token">GitHub Personal Access Token</label>
+                        <input type="password" id="settings-github-token" class="glass-input">
+                    </div>
+                </div>
+
+                <!-- Section 2: Preferences -->
+                <div class="settings-section">
+                    <h3>Design & Start-Optionen</h3>
+                    <div class="form-row">
+                        <div class="form-group half">
+                            <label for="settings-theme">Design-Farbe</label>
+                            <select id="settings-theme" class="glass-input">
+                                <option value="cyan">Cyan</option>
+                                <option value="red">Rot</option>
+                                <option value="blue">Blau</option>
+                                <option value="purple">Lila</option>
+                                <option value="black">Schwarz</option>
+                            </select>
+                        </div>
+                        <div class="form-group half">
+                            <label for="settings-view">Start-Ansicht</label>
+                            <select id="settings-view" class="glass-input">
+                                <option value="Galerie">Galerie</option>
+                                <option value="Tabelle">Tabelle</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="settings-path">Poster & Banner Speicherpfad</label>
+                        <div class="input-action-group">
+                            <input type="text" id="settings-path" readonly placeholder="Standard: AppData" class="glass-input">
+                            <button type="button" id="btn-browse-path" class="btn btn-secondary">Durchsuchen</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Database actions -->
+                <div class="settings-section">
+                    <h3>Lokale Filmdatenbank</h3>
+                    <div class="form-row">
+                        <button type="button" id="btn-backup-db" class="btn btn-secondary half">Backup erstellen</button>
+                        <button type="button" id="btn-restore-db" class="btn btn-secondary half">Backup laden</button>
+                    </div>
+                    <button type="button" id="btn-reset-db" class="btn btn-danger" style="margin-top: 10px; width: 100%;">Datenbank leeren / neu starten</button>
+                </div>
+
+                <!-- Status & Action Row -->
+                <div class="settings-footer">
+                    <div class="credits">
+                        <span>Creator: ®TENTIX LLC</span>
+                        <span>Founder: Martin K.</span>
+                    </div>
+                    <div class="action-buttons">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-settings')">Abbrechen</button>
+                        <button type="button" id="btn-test-keys" class="btn btn-secondary">Verbindungen testen</button>
+                        <button type="submit" class="btn btn-primary btn-glow">Speichern & Schließen</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Movie Add/Edit Modal -->
+    <div id="modal-movie-form" class="modal-overlay">
+        <div class="modal-container glass movie-form-card">
+            <button class="modal-close" onclick="closeModal('modal-movie-form')">&times;</button>
+            <h2 id="movie-form-title" class="section-title">Film hinzufügen</h2>
+            
+            <form id="movie-form" onsubmit="submitMovieForm(event)">
+                <input type="hidden" id="form-movie-id">
+                <input type="hidden" id="form-tmdb-id">
+
+                <div class="form-row">
+                    <div class="form-group half">
+                        <label for="form-title">Titel *</label>
+                        <input type="text" id="form-title" required class="glass-input">
+                    </div>
+                    <div class="form-group half">
+                        <label for="form-year">Jahr</label>
+                        <input type="number" id="form-year" class="glass-input">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group half">
+                        <label for="form-director">Regisseur</label>
+                        <input type="text" id="form-director" class="glass-input">
+                    </div>
+                    <div class="form-group half">
+                        <label for="form-runtime">Laufzeit (Minuten)</label>
+                        <input type="number" id="form-runtime" class="glass-input">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group half">
+                        <label for="form-genre">Genre</label>
+                        <input type="text" id="form-genre" class="glass-input">
+                    </div>
+                    <div class="form-group half">
+                        <label for="form-series">Filmreihe</label>
+                        <input type="text" id="form-series" class="glass-input">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group half">
+                        <label for="form-fsk">FSK</label>
+                        <select id="form-fsk" class="glass-input">
+                            <option value="">Ohne Altersbeschränkung</option>
+                            <option value="0">FSK 0</option>
+                            <option value="6">FSK 6</option>
+                            <option value="12">FSK 12</option>
+                            <option value="16">FSK 16</option>
+                            <option value="18">FSK 18</option>
+                        </select>
+                    </div>
+                    <div class="form-group half">
+                        <label for="form-studio">Produktionsfirma</label>
+                        <input type="text" id="form-studio" class="glass-input">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group half">
+                        <label for="form-country">Produktionsland</label>
+                        <input type="text" id="form-country" class="glass-input">
+                    </div>
+                    <div class="form-group half">
+                        <!-- Empty for balancing -->
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="form-description">Beschreibung</label>
+                    <textarea id="form-description" rows="3" class="glass-input"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="form-cast">Schauspieler (Cast)</label>
+                    <textarea id="form-cast" rows="2" class="glass-input"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="form-voices">Deutsche Synchronsprecher</label>
+                    <textarea id="form-voices" rows="2" class="glass-input"></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group half">
+                        <label for="form-poster">Poster Bild</label>
+                        <div class="input-action-group">
+                            <input type="text" id="form-poster" class="glass-input" readonly placeholder="Bild auswählen oder URL...">
+                            <button type="button" id="btn-browse-poster" class="btn btn-secondary">Durchsuchen</button>
+                        </div>
+                    </div>
+                    <div class="form-group half">
+                        <label for="form-banner">Banner Bild</label>
+                        <div class="input-action-group">
+                            <input type="text" id="form-banner" class="glass-input" readonly placeholder="Bild auswählen oder URL...">
+                            <button type="button" id="btn-browse-banner" class="btn btn-secondary">Durchsuchen</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('modal-movie-form')">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary btn-glow">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Online Search Matches Modal -->
+    <div id="modal-online-matches" class="modal-overlay">
+        <div class="modal-container glass online-matches-card">
+            <button class="modal-close" onclick="closeModal('modal-online-matches')">&times;</button>
+            <h2 class="section-title">Online Suchergebnisse (TMDB)</h2>
+            <p class="section-subtitle">Wählen Sie einen Film aus, um die Details automatisch zu laden.</p>
+            
+            <div id="online-matches-list" class="online-matches-list">
+                <!-- Matches list populated dynamically -->
+            </div>
+            
+            <div class="form-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('modal-online-matches')">Schließen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <p id="loading-text">Lade...</p>
+    </div>
+
+    <!-- Core App JS -->
+    <script src="app.js"></script>
+</body>
+</html>
