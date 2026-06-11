@@ -160,11 +160,41 @@ def test_tier1_custom_path_download_save(backend_server):
     resp = requests.post(f"{backend_server}/api/import", json={"tmdb_id": 27205}, timeout=1)
     assert resp.status_code == 200
     
-    # Poster should be inside the custom path directly
+    # Poster should NOT be inside the custom path directly yet (since import doesn't do it anymore)
     import glob
+    assert len(glob.glob(os.path.join(custom_path, "*_PT.png"))) == 0
+    assert len(glob.glob(os.path.join(custom_path, "*_WP.png"))) == 0
+    
+    # Fetch movie details to get the image paths
+    resp_details = requests.get(f"{backend_server}/api/media/details/27205", timeout=1)
+    assert resp_details.status_code == 200
+    details = resp_details.json()
+    
+    # Call download_desktop for poster
+    res_poster = requests.post(f"{backend_server}/api/download_desktop", json={
+        "movie_title": details.get("name"),
+        "file_path": details.get("poster_pfad"),
+        "img_type": "poster",
+        "movie_year": details.get("jahr")
+    }, timeout=1)
+    assert res_poster.status_code == 200
+    assert res_poster.json().get("success") is True
+    
+    # Call download_desktop for banner
+    res_banner = requests.post(f"{backend_server}/api/download_desktop", json={
+        "movie_title": details.get("name"),
+        "file_path": details.get("banner_pfad"),
+        "img_type": "banner",
+        "movie_year": details.get("jahr")
+    }, timeout=1)
+    assert res_banner.status_code == 200
+    assert res_banner.json().get("success") is True
+    
+    # Now poster/banner should be inside the custom path directly
     assert len(glob.glob(os.path.join(custom_path, "*_PT.png"))) > 0
     assert len(glob.glob(os.path.join(custom_path, "*_WP.png"))) > 0
     shutil.rmtree(custom_path, ignore_errors=True)
+
 
 def test_tier1_custom_path_load(backend_server):
     """Load media files from the custom path if set and file is present."""

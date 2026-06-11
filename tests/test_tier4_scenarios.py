@@ -53,11 +53,39 @@ def test_tier4_scenario_curation(backend_server):
     resp_import = requests.post(f"{backend_server}/api/import", json={"tmdb_id": movie_id}, timeout=1)
     assert resp_import.status_code == 200
     
-    # 3. Check downloaded assets in custom path (saved direct 1:1 as PNG)
+    # 3. Check that custom path is empty first
     import glob
+    assert len(glob.glob(os.path.join(custom_path, "*_PT.png"))) == 0
+    assert len(glob.glob(os.path.join(custom_path, "*_WP.png"))) == 0
+    
+    # Fetch details
+    resp_details = requests.get(f"{backend_server}/api/media/details/{movie_id}", timeout=1)
+    assert resp_details.status_code == 200
+    details = resp_details.json()
+    
+    # Save poster
+    res_poster = requests.post(f"{backend_server}/api/download_desktop", json={
+        "movie_title": details.get("name"),
+        "file_path": details.get("poster_pfad"),
+        "img_type": "poster",
+        "movie_year": details.get("jahr")
+    }, timeout=1)
+    assert res_poster.status_code == 200
+    
+    # Save banner
+    res_banner = requests.post(f"{backend_server}/api/download_desktop", json={
+        "movie_title": details.get("name"),
+        "file_path": details.get("banner_pfad"),
+        "img_type": "banner",
+        "movie_year": details.get("jahr")
+    }, timeout=1)
+    assert res_banner.status_code == 200
+    
+    # 4. Check downloaded assets in custom path (saved direct 1:1 as PNG)
     assert len(glob.glob(os.path.join(custom_path, "*_PT.png"))) > 0
     assert len(glob.glob(os.path.join(custom_path, "*_WP.png"))) > 0
     shutil.rmtree(custom_path, ignore_errors=True)
+
 
 def test_tier4_scenario_relocation(backend_server):
     """Change path, copy images, reload movie details, verify new paths loaded."""

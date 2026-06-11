@@ -924,7 +924,7 @@ class TMDBClient:
     def download_and_cache_image(self, remote_path: Optional[str], tmdb_id: int, image_type: str, movie_title: str = "", movie_year: Optional[int] = None) -> str:
         """
         Downloads a poster or banner image from TMDB, checks if it is already cached locally,
-        and saves it to the custom media directory if configured, or default folders.
+        and saves it to the default AppData/local folder.
         Always saves in PNG format with naming convention:
         [Filmname] ([Jahr])_PT.png (poster) or [Filmname] ([Jahr])_WP.png (banner).
         """
@@ -938,19 +938,13 @@ class TMDBClient:
         suffix = "_PT" if image_type == "poster" else "_WP"
         local_filename = f"{safe_title}{year_str}{suffix}.png"
 
-        # Check if there is a custom media path
-        custom_path = load_config().get("custom_media_path", "").strip()
-        if custom_path and os.path.isdir(custom_path):
-            folder = custom_path
-            local_path = os.path.join(folder, local_filename)
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        if local_appdata:
+            folder = os.path.join(local_appdata, "CinePalast Manager", "assets", "posters" if image_type == "poster" else "banners")
         else:
-            local_appdata = os.environ.get("LOCALAPPDATA")
-            if local_appdata:
-                folder = os.path.join(local_appdata, "CinePalast Manager", "assets", "posters" if image_type == "poster" else "banners")
-            else:
-                folder = os.path.join(get_app_dir(), "assets", "posters" if image_type == "poster" else "banners")
-            os.makedirs(folder, exist_ok=True)
-            local_path = os.path.join(folder, local_filename)
+            folder = os.path.join(get_app_dir(), "assets", "posters" if image_type == "poster" else "banners")
+        os.makedirs(folder, exist_ok=True)
+        local_path = os.path.join(folder, local_filename)
 
         if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
             return local_path
@@ -972,6 +966,7 @@ class TMDBClient:
             print(f"Error downloading image {download_url}: {e}")
             
         return ""
+
 
 
 def check_for_update(current_version: str) -> Optional[str]:

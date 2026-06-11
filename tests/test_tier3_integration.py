@@ -27,11 +27,29 @@ def test_tier3_search_online_and_save_custom(backend_server):
     resp_import = requests.post(f"{backend_server}/api/import", json={"tmdb_id": movie_id}, timeout=1)
     assert resp_import.status_code == 200
     
-    # 3. Verify poster in custom path (saved direct 1:1 as PNG)
+    # Check that custom path is empty first
     import glob
+    assert len(glob.glob(os.path.join(custom_path, "*_PT.png"))) == 0
+    
+    # Fetch details
+    resp_details = requests.get(f"{backend_server}/api/media/details/{movie_id}", timeout=1)
+    assert resp_details.status_code == 200
+    details = resp_details.json()
+    
+    # Trigger download_desktop for poster
+    res_poster = requests.post(f"{backend_server}/api/download_desktop", json={
+        "movie_title": details.get("name"),
+        "file_path": details.get("poster_pfad"),
+        "img_type": "poster",
+        "movie_year": details.get("jahr")
+    }, timeout=1)
+    assert res_poster.status_code == 200
+    
+    # 3. Verify poster in custom path (saved direct 1:1 as PNG)
     pngs = glob.glob(os.path.join(custom_path, "*_PT.png"))
     assert len(pngs) > 0
     shutil.rmtree(custom_path, ignore_errors=True)
+
 
 def test_tier3_boot_with_custom_path(backend_server):
     """Boot app with preconfigured custom path in config.json, verify server loads images from that path on startup."""

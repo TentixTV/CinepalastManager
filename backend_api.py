@@ -269,10 +269,26 @@ class CinePalastAPI:
                     filename = os.path.basename(file_path)
                     config = api.load_config()
                     custom_path = config.get("custom_media_path", "").strip()
+                    resolved = False
                     if custom_path and os.path.isdir(custom_path):
                         test_path = os.path.join(custom_path, filename)
                         if os.path.exists(test_path):
                             abs_path = test_path
+                            resolved = True
+                    if not resolved:
+                        local_appdata = os.environ.get("LOCALAPPDATA")
+                        sub = "posters" if img_type == "poster" else "banners"
+                        if local_appdata:
+                            test_path = os.path.join(local_appdata, "CinePalast Manager", "assets", sub, filename)
+                            if os.path.exists(test_path):
+                                abs_path = test_path
+                                resolved = True
+                        if not resolved:
+                            test_path = os.path.join(self.get_app_dir(), "assets", sub, filename)
+                            if os.path.exists(test_path):
+                                abs_path = test_path
+                                resolved = True
+
             
             if not os.path.exists(abs_path):
                 return {"error": f"Die Bilddatei wurde lokal nicht gefunden: {abs_path}"}

@@ -254,6 +254,25 @@ def api_import():
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+@bottle.post('/api/download_desktop')
+def api_download_desktop():
+    try:
+        data = bottle.request.json or {}
+        movie_title = data.get("movie_title", "")
+        file_path = data.get("file_path", "")
+        img_type = data.get("img_type", "poster")
+        movie_year = data.get("movie_year")
+        if movie_year is not None:
+            movie_year = int(movie_year)
+            
+        import backend_api
+        api_instance = backend_api.CinePalastAPI()
+        res = api_instance.download_image_to_desktop(movie_title, file_path, img_type, movie_year)
+        return res
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @bottle.get('/api/credits')
 def api_credits():
     local_appdata = os.environ.get("LOCALAPPDATA")
@@ -354,13 +373,25 @@ def api_media_details(tmdb_id):
     if custom_path and os.path.isdir(custom_path):
         if os.path.exists(os.path.join(custom_path, poster_filename)):
             poster_abs = os.path.join(custom_path, poster_filename)
-        else:
+        elif os.path.exists(os.path.join(custom_path, "posters", poster_filename)):
             poster_abs = os.path.join(custom_path, "posters", poster_filename)
+        else:
+            local_appdata = os.environ.get("LOCALAPPDATA")
+            if local_appdata and os.path.exists(os.path.join(local_appdata, "CinePalast Manager", "assets", "posters", poster_filename)):
+                poster_abs = os.path.join(local_appdata, "CinePalast Manager", "assets", "posters", poster_filename)
+            else:
+                poster_abs = os.path.join(get_app_dir(), "assets", "posters", poster_filename)
             
         if os.path.exists(os.path.join(custom_path, banner_filename)):
             banner_abs = os.path.join(custom_path, banner_filename)
-        else:
+        elif os.path.exists(os.path.join(custom_path, "banners", banner_filename)):
             banner_abs = os.path.join(custom_path, "banners", banner_filename)
+        else:
+            local_appdata = os.environ.get("LOCALAPPDATA")
+            if local_appdata and os.path.exists(os.path.join(local_appdata, "CinePalast Manager", "assets", "banners", banner_filename)):
+                banner_abs = os.path.join(local_appdata, "CinePalast Manager", "assets", "banners", banner_filename)
+            else:
+                banner_abs = os.path.join(get_app_dir(), "assets", "banners", banner_filename)
     else:
         local_appdata = os.environ.get("LOCALAPPDATA")
         if local_appdata:
@@ -369,6 +400,7 @@ def api_media_details(tmdb_id):
         else:
             poster_abs = os.path.join(get_app_dir(), "assets", "posters", poster_filename)
             banner_abs = os.path.join(get_app_dir(), "assets", "banners", banner_filename)
+
             
     res["Poster_Pfad"] = poster_abs
     res["Banner_Pfad"] = banner_abs
