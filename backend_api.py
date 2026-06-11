@@ -284,9 +284,19 @@ class CinePalastAPI:
             suffix = "_PT" if img_type == "poster" else "_WP"
             dest_filename = f"{safe_title}{year_str}{suffix}.png"
             
-            # Desktop dir
-            desktop_dir = os.path.join(os.environ["USERPROFILE"], "Desktop") if "USERPROFILE" in os.environ else os.path.expanduser("~/Desktop")
-            dest_path = os.path.join(desktop_dir, dest_filename)
+            # Check if there is a custom media path
+            config = api.load_config()
+            custom_path = config.get("custom_media_path", "").strip()
+            
+            is_custom = False
+            if custom_path and os.path.isdir(custom_path):
+                dest_dir = custom_path
+                is_custom = True
+            else:
+                # Desktop dir
+                dest_dir = os.path.join(os.environ["USERPROFILE"], "Desktop") if "USERPROFILE" in os.environ else os.path.expanduser("~/Desktop")
+                
+            dest_path = os.path.join(dest_dir, dest_filename)
             
             from PIL import Image
             img = Image.open(abs_path)
@@ -294,6 +304,6 @@ class CinePalastAPI:
                 img = img.convert("RGB")
             img.save(dest_path, format="PNG")
             
-            return {"success": True, "filename": dest_filename}
+            return {"success": True, "filename": dest_filename, "is_custom_path": is_custom, "custom_path": dest_dir}
         except Exception as e:
             return {"error": str(e)}

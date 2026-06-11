@@ -1038,7 +1038,11 @@ async function downloadPoster(movie) {
         const res = await pywebview.api.download_image_to_desktop(movie.Name, movie.Poster_Pfad, 'poster', movie.Jahr);
         hideLoading();
         if (res.success) {
-            showCustomAlert(`Das Film-Poster wurde auf Ihrem Desktop gespeichert als:\n\n${res.filename}`, "Poster gespeichert");
+            if (res.is_custom_path) {
+                showCustomAlert(`Das Film-Poster wurde in Ihrem Medienordner gespeichert als:\n\n${res.filename}`, "Poster gespeichert");
+            } else {
+                showCustomAlert(`Das Film-Poster wurde auf Ihrem Desktop gespeichert als:\n\n${res.filename}`, "Poster gespeichert");
+            }
         } else {
             showCustomAlert("Fehler beim Speichern: " + res.error, "Fehler");
         }
@@ -1055,7 +1059,11 @@ async function downloadBanner(movie) {
         const res = await pywebview.api.download_image_to_desktop(movie.Name, movie.Banner_Pfad, 'banner', movie.Jahr);
         hideLoading();
         if (res.success) {
-            showCustomAlert(`Das Filmbanner wurde auf Ihrem Desktop gespeichert als:\n\n${res.filename}`, "Banner gespeichert");
+            if (res.is_custom_path) {
+                showCustomAlert(`Das Filmbanner wurde in Ihrem Medienordner gespeichert als:\n\n${res.filename}`, "Banner gespeichert");
+            } else {
+                showCustomAlert(`Das Filmbanner wurde auf Ihrem Desktop gespeichert als:\n\n${res.filename}`, "Banner gespeichert");
+            }
         } else {
             showCustomAlert("Fehler beim Speichern: " + res.error, "Fehler");
         }
