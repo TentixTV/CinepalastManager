@@ -27,9 +27,10 @@ def test_tier3_search_online_and_save_custom(backend_server):
     resp_import = requests.post(f"{backend_server}/api/import", json={"tmdb_id": movie_id}, timeout=1)
     assert resp_import.status_code == 200
     
-    # 3. Verify poster in custom path
-    poster_file = os.path.join(custom_path, "posters", f"{movie_id}.jpg")
-    assert os.path.exists(poster_file)
+    # 3. Verify poster in custom path (saved direct 1:1 as PNG)
+    import glob
+    pngs = glob.glob(os.path.join(custom_path, "*_PT.png"))
+    assert len(pngs) > 0
     shutil.rmtree(custom_path, ignore_errors=True)
 
 def test_tier3_boot_with_custom_path(backend_server):
@@ -82,8 +83,10 @@ def test_tier3_search_add_and_relocate(backend_server):
     new_path = os.path.abspath("test_tier3_relocate_dest")
     requests.post(f"{backend_server}/api/settings", json={"custom_media_path": new_path, "copy_existing": True}, timeout=1)
     
-    # 4. Verify copied to new path
-    assert os.path.exists(os.path.join(new_path, "posters", f"{movie_id}.jpg"))
+    # 4. Verify copied to new path (copied direct 1:1 as PNG)
+    import glob
+    pngs = glob.glob(os.path.join(new_path, "*_PT.png"))
+    assert len(pngs) > 0
     shutil.rmtree(new_path, ignore_errors=True)
 
 def test_tier3_boot_serve_credits(backend_server):

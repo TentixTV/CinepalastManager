@@ -16,6 +16,8 @@ def serve_poster(filename):
     config = api.load_config()
     custom_path = config.get("custom_media_path", "").strip()
     if custom_path and os.path.isdir(custom_path):
+        if os.path.exists(os.path.join(custom_path, filename)):
+            return bottle.static_file(filename, root=custom_path)
         folder = os.path.join(custom_path, "posters")
         if os.path.exists(os.path.join(folder, filename)):
             return bottle.static_file(filename, root=folder)
@@ -33,6 +35,8 @@ def serve_banner(filename):
     config = api.load_config()
     custom_path = config.get("custom_media_path", "").strip()
     if custom_path and os.path.isdir(custom_path):
+        if os.path.exists(os.path.join(custom_path, filename)):
+            return bottle.static_file(filename, root=custom_path)
         folder = os.path.join(custom_path, "banners")
         if os.path.exists(os.path.join(folder, filename)):
             return bottle.static_file(filename, root=folder)
@@ -322,6 +326,18 @@ def api_media_details(tmdb_id):
            OR Banner_Pfad LIKE ?;
     """, (f"%{tmdb_id}.%", f"%{tmdb_id}.%"))
     row = cursor.fetchone()
+    
+    if not row:
+        try:
+            client = api.TMDBClient()
+            details = client.fetch_movie_preview(tmdb_id)
+            title = details.get("titel")
+            if title:
+                cursor.execute("SELECT * FROM media WHERE Name = ?;", (title,))
+                row = cursor.fetchone()
+        except Exception as e:
+            print("Failed online lookup in api_media_details:", e)
+            
     conn.close()
     
     if not row:
@@ -336,8 +352,15 @@ def api_media_details(tmdb_id):
     banner_filename = os.path.basename(res.get("Banner_Pfad") or "")
     
     if custom_path and os.path.isdir(custom_path):
-        poster_abs = os.path.join(custom_path, "posters", poster_filename)
-        banner_abs = os.path.join(custom_path, "banners", banner_filename)
+        if os.path.exists(os.path.join(custom_path, poster_filename)):
+            poster_abs = os.path.join(custom_path, poster_filename)
+        else:
+            poster_abs = os.path.join(custom_path, "posters", poster_filename)
+            
+        if os.path.exists(os.path.join(custom_path, banner_filename)):
+            banner_abs = os.path.join(custom_path, banner_filename)
+        else:
+            banner_abs = os.path.join(custom_path, "banners", banner_filename)
     else:
         local_appdata = os.environ.get("LOCALAPPDATA")
         if local_appdata:

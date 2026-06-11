@@ -682,6 +682,16 @@ function getMediaUrl(dbPath) {
     const normalized = dbPath.replace(/\\/g, '/');
     const lower = normalized.toLowerCase();
     
+    // Check direct filenames with suffix (e.g. Inception (2010)_PT.png)
+    const filename = normalized.substring(normalized.lastIndexOf('/') + 1);
+    const fnLower = filename.toLowerCase();
+    if (fnLower.includes('_pt.png') || fnLower.includes('_pt.')) {
+        return '/media/posters/' + filename;
+    }
+    if (fnLower.includes('_wp.png') || fnLower.includes('_wp.')) {
+        return '/media/banners/' + filename;
+    }
+    
     if (lower.includes('/posters/')) {
         const idx = lower.indexOf('/posters/');
         return '/media/posters/' + normalized.substring(idx + 9);
@@ -1025,7 +1035,7 @@ async function downloadPoster(movie) {
     if (!movie.Poster_Pfad) return;
     showLoading("Speichere Poster...");
     try {
-        const res = await pywebview.api.download_image_to_desktop(movie.Name, movie.Poster_Pfad, 'poster');
+        const res = await pywebview.api.download_image_to_desktop(movie.Name, movie.Poster_Pfad, 'poster', movie.Jahr);
         hideLoading();
         if (res.success) {
             showCustomAlert(`Das Film-Poster wurde auf Ihrem Desktop gespeichert als:\n\n${res.filename}`, "Poster gespeichert");
@@ -1042,7 +1052,7 @@ async function downloadBanner(movie) {
     if (!movie.Banner_Pfad) return;
     showLoading("Speichere Banner...");
     try {
-        const res = await pywebview.api.download_image_to_desktop(movie.Name, movie.Banner_Pfad, 'banner');
+        const res = await pywebview.api.download_image_to_desktop(movie.Name, movie.Banner_Pfad, 'banner', movie.Jahr);
         hideLoading();
         if (res.success) {
             showCustomAlert(`Das Filmbanner wurde auf Ihrem Desktop gespeichert als:\n\n${res.filename}`, "Banner gespeichert");
@@ -1060,7 +1070,7 @@ async function changeBanner(movie) {
         const filePath = await pywebview.api.select_image_file();
         if (filePath) {
             showLoading("Kopiere Banner...");
-            const res = await pywebview.api.copy_image_to_media(filePath, 'banner');
+            const res = await pywebview.api.copy_image_to_media(filePath, 'banner', movie.Name, movie.Jahr);
             hideLoading();
             
             if (res.success) {
@@ -1134,7 +1144,9 @@ async function browseAsset(imgType) {
         const filePath = await pywebview.api.select_image_file();
         if (filePath) {
             showLoading("Kopiere Bild...");
-            const res = await pywebview.api.copy_image_to_media(filePath, imgType);
+            const movieTitle = document.getElementById('form-title').value || 'Unbekannt';
+            const movieYear = parseInt(document.getElementById('form-year').value) || null;
+            const res = await pywebview.api.copy_image_to_media(filePath, imgType, movieTitle, movieYear);
             hideLoading();
             
             if (res.success) {

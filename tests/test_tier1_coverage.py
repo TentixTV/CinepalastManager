@@ -160,11 +160,10 @@ def test_tier1_custom_path_download_save(backend_server):
     resp = requests.post(f"{backend_server}/api/import", json={"tmdb_id": 27205}, timeout=1)
     assert resp.status_code == 200
     
-    # Poster should be inside the custom path posters folder
-    poster_file = os.path.join(custom_path, "posters", "27205.jpg")
-    banner_file = os.path.join(custom_path, "banners", "27205.jpg")
-    assert os.path.exists(poster_file)
-    assert os.path.exists(banner_file)
+    # Poster should be inside the custom path directly
+    import glob
+    assert len(glob.glob(os.path.join(custom_path, "*_PT.png"))) > 0
+    assert len(glob.glob(os.path.join(custom_path, "*_WP.png"))) > 0
     shutil.rmtree(custom_path, ignore_errors=True)
 
 def test_tier1_custom_path_load(backend_server):
@@ -226,7 +225,7 @@ def test_tier1_copy_posters(backend_server):
     resp = requests.post(f"{backend_server}/api/settings", json={"custom_media_path": new_path, "copy_existing": True}, timeout=1)
     assert resp.status_code == 200
     
-    copied_file = os.path.join(new_path, "posters", "copy_test_poster.jpg")
+    copied_file = os.path.join(new_path, "copy_test_poster.jpg")
     assert os.path.exists(copied_file)
     with open(copied_file, "rb") as f:
         assert f.read() == b"POSTER_TO_COPY"
@@ -243,7 +242,7 @@ def test_tier1_copy_banners(backend_server):
     resp = requests.post(f"{backend_server}/api/settings", json={"custom_media_path": new_path, "copy_existing": True}, timeout=1)
     assert resp.status_code == 200
     
-    copied_file = os.path.join(new_path, "banners", "copy_test_banner.jpg")
+    copied_file = os.path.join(new_path, "copy_test_banner.jpg")
     assert os.path.exists(copied_file)
     with open(copied_file, "rb") as f:
         assert f.read() == b"BANNER_TO_COPY"

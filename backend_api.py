@@ -45,7 +45,7 @@ class CinePalastAPI:
 
     def get_movie_details(self, tmdb_id: int) -> Dict:
         try:
-            return self.tmdb_client.fetch_movie_details(tmdb_id)
+            return self.tmdb_client.fetch_movie_preview(tmdb_id)
         except Exception as e:
             print("Error get_movie_details:", e)
             return {}
@@ -56,11 +56,13 @@ class CinePalastAPI:
             poster_path = movie_data.get("Poster_Pfad", "")
             banner_path = movie_data.get("Banner_Pfad", "")
             tmdb_id = movie_data.get("tmdb_id")
+            movie_title = movie_data.get("Name", "")
+            movie_year = movie_data.get("Jahr")
             
             if poster_path and poster_path.startswith("/"):
-                poster_path = self.tmdb_client.download_and_cache_image(poster_path, tmdb_id, "poster")
+                poster_path = self.tmdb_client.download_and_cache_image(poster_path, tmdb_id, "poster", movie_title, movie_year)
             if banner_path and banner_path.startswith("/"):
-                banner_path = self.tmdb_client.download_and_cache_image(banner_path, tmdb_id, "banner")
+                banner_path = self.tmdb_client.download_and_cache_image(banner_path, tmdb_id, "banner", movie_title, movie_year)
                 
             movie_data["Poster_Pfad"] = poster_path
             movie_data["Banner_Pfad"] = banner_path
@@ -111,27 +113,38 @@ class CinePalastAPI:
             return result[0]
         return None
 
-    def copy_image_to_media(self, file_path: str, img_type: str) -> Dict:
+    def copy_image_to_media(self, file_path: str, img_type: str, movie_title: str = "", movie_year: Optional[int] = None) -> Dict:
         try:
-            filename = os.path.basename(file_path)
-            unique_name = f"{int(time.time())}_{filename}"
+            import re
+            safe_title = re.sub(r'[\/\\\:\*\?\"\<\>\|]', '', movie_title or "Unbekannt")
+            safe_title = " ".join(safe_title.split())
+            year_str = f" ({movie_year})" if movie_year else ""
+            suffix = "_PT" if img_type == "poster" else "_WP"
+            local_filename = f"{safe_title}{year_str}{suffix}.png"
             
             config = api.load_config()
             custom_path = config.get("custom_media_path", "").strip()
             if custom_path and os.path.isdir(custom_path):
-                folder = os.path.join(custom_path, "posters" if img_type == "poster" else "banners")
+                folder = custom_path
+                dest_path = os.path.join(folder, local_filename)
+                db_path = dest_path
             else:
                 local_appdata = os.environ.get("LOCALAPPDATA")
                 if local_appdata:
                     folder = os.path.join(local_appdata, "CinePalast Manager", "assets", "posters" if img_type == "poster" else "banners")
                 else:
                     folder = os.path.join(self.get_app_dir(), "assets", "posters" if img_type == "poster" else "banners")
+                dest_path = os.path.join(folder, local_filename)
+                db_path = f"assets/{'posters' if img_type == 'poster' else 'banners'}/{local_filename}"
                 
             os.makedirs(folder, exist_ok=True)
-            dest_path = os.path.join(folder, unique_name)
-            shutil.copy2(file_path, dest_path)
             
-            db_path = f"assets/{'posters' if img_type == 'poster' else 'banners'}/{unique_name}"
+            from PIL import Image
+            img = Image.open(file_path)
+            if img.mode == "CMYK":
+                img = img.convert("RGB")
+            img.save(dest_path, format="PNG")
+            
             return {"success": True, "path": db_path}
         except Exception as e:
             return {"error": str(e)}
@@ -143,26 +156,26 @@ class CinePalastAPI:
             
             src_dirs = []
             if old_path and os.path.isdir(old_path):
-                src_dirs.append((os.path.join(old_path, "posters"), "posters"))
-                src_dirs.append((os.path.join(old_path, "banners"), "banners"))
+                src_dirs.append((old_path, ""))
+                src_dirs.append((os.path.join(old_path, "posters"), ""))
+                src_dirs.append((os.path.join(old_path, "banners"), ""))
             
             local_appdata = os.environ.get("LOCALAPPDATA")
             if local_appdata:
-                src_dirs.append((os.path.join(local_appdata, "CinePalast Manager", "assets", "posters"), "posters"))
-                src_dirs.append((os.path.join(local_appdata, "CinePalast Manager", "assets", "banners"), "banners"))
+                src_dirs.append((os.path.join(local_appdata, "CinePalast Manager", "assets", "posters"), ""))
+                src_dirs.append((os.path.join(local_appdata, "CinePalast Manager", "assets", "banners"), ""))
                 
-            src_dirs.append((os.path.join(self.get_app_dir(), "assets", "posters"), "posters"))
-            src_dirs.append((os.path.join(self.get_app_dir(), "assets", "banners"), "banners"))
+            src_dirs.append((os.path.join(self.get_app_dir(), "assets", "posters"), ""))
+            src_dirs.append((os.path.join(self.get_app_dir(), "assets", "banners"), ""))
             
             copied = 0
-            for src_dir, sub in src_dirs:
+            for src_dir, _ in src_dirs:
                 if os.path.isdir(src_dir):
-                    dest_dir = os.path.join(new_path, sub)
-                    os.makedirs(dest_dir, exist_ok=True)
+                    os.makedirs(new_path, exist_ok=True)
                     for item in os.listdir(src_dir):
                         src_file = os.path.join(src_dir, item)
                         if os.path.isfile(src_file):
-                            dest_file = os.path.join(dest_dir, item)
+                            dest_file = os.path.join(new_path, item)
                             if os.path.abspath(src_file) != os.path.abspath(dest_file):
                                 if not os.path.exists(dest_file):
                                     shutil.copy2(src_file, dest_file)
@@ -216,31 +229,32 @@ class CinePalastAPI:
             print("Error get_popular_movies in api:", e)
             return []
 
-    def download_image_to_desktop(self, movie_title: str, file_path: str, img_type: str) -> Dict:
+    def download_image_to_desktop(self, movie_title: str, file_path: str, img_type: str, movie_year: Optional[int] = None) -> Dict:
         try:
             if not file_path:
                 return {"error": "Kein Bild vorhanden."}
                 
-            # If it's a relative path starting with assets/, resolve it absolutely
+            # If it's a relative path, resolve it absolutely
             abs_path = file_path
             if not os.path.isabs(file_path):
-                # Check custom path first
                 config = api.load_config()
                 custom_path = config.get("custom_media_path", "").strip()
                 filename = os.path.basename(file_path)
-                
-                # Determine folder name
                 sub = "posters" if img_type == "poster" else "banners"
                 
                 resolved = False
                 if custom_path and os.path.isdir(custom_path):
-                    test_path = os.path.join(custom_path, sub, filename)
+                    test_path = os.path.join(custom_path, filename)
                     if os.path.exists(test_path):
                         abs_path = test_path
                         resolved = True
+                    else:
+                        test_path2 = os.path.join(custom_path, sub, filename)
+                        if os.path.exists(test_path2):
+                            abs_path = test_path2
+                            resolved = True
                 
                 if not resolved:
-                    # Check AppData path
                     local_appdata = os.environ.get("LOCALAPPDATA")
                     if local_appdata:
                         test_path = os.path.join(local_appdata, "CinePalast Manager", "assets", sub, filename)
@@ -249,28 +263,37 @@ class CinePalastAPI:
                             resolved = True
                             
                 if not resolved:
-                    # Fallback to installation folder
                     abs_path = os.path.join(self.get_app_dir(), "assets", sub, filename)
+            else:
+                if not os.path.exists(abs_path):
+                    filename = os.path.basename(file_path)
+                    config = api.load_config()
+                    custom_path = config.get("custom_media_path", "").strip()
+                    if custom_path and os.path.isdir(custom_path):
+                        test_path = os.path.join(custom_path, filename)
+                        if os.path.exists(test_path):
+                            abs_path = test_path
             
             if not os.path.exists(abs_path):
                 return {"error": f"Die Bilddatei wurde lokal nicht gefunden: {abs_path}"}
                 
             import re
-            # Clean title
-            clean_title = re.sub(r'[\/\\\:\*\?\"\<\>\|]', '', movie_title)
-            clean_title = clean_title.replace(" ", "_")
+            safe_title = re.sub(r'[\/\\\:\*\?\"\<\>\|]', '', movie_title or "Unbekannt")
+            safe_title = " ".join(safe_title.split())
+            year_str = f" ({movie_year})" if movie_year else ""
+            suffix = "_PT" if img_type == "poster" else "_WP"
+            dest_filename = f"{safe_title}{year_str}{suffix}.png"
             
             # Desktop dir
             desktop_dir = os.path.join(os.environ["USERPROFILE"], "Desktop") if "USERPROFILE" in os.environ else os.path.expanduser("~/Desktop")
-            
-            ext = os.path.splitext(abs_path)[1]
-            if not ext:
-                ext = ".jpg"
-                
-            dest_filename = f"{clean_title}_{img_type}{ext}"
             dest_path = os.path.join(desktop_dir, dest_filename)
             
-            shutil.copy2(abs_path, dest_path)
+            from PIL import Image
+            img = Image.open(abs_path)
+            if img.mode == "CMYK":
+                img = img.convert("RGB")
+            img.save(dest_path, format="PNG")
+            
             return {"success": True, "filename": dest_filename}
         except Exception as e:
             return {"error": str(e)}

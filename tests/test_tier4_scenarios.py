@@ -53,11 +53,10 @@ def test_tier4_scenario_curation(backend_server):
     resp_import = requests.post(f"{backend_server}/api/import", json={"tmdb_id": movie_id}, timeout=1)
     assert resp_import.status_code == 200
     
-    # 3. Check downloaded assets in custom path
-    poster_path = os.path.join(custom_path, "posters", f"{movie_id}.jpg")
-    banner_path = os.path.join(custom_path, "banners", f"{movie_id}.jpg")
-    assert os.path.exists(poster_path)
-    assert os.path.exists(banner_path)
+    # 3. Check downloaded assets in custom path (saved direct 1:1 as PNG)
+    import glob
+    assert len(glob.glob(os.path.join(custom_path, "*_PT.png"))) > 0
+    assert len(glob.glob(os.path.join(custom_path, "*_WP.png"))) > 0
     shutil.rmtree(custom_path, ignore_errors=True)
 
 def test_tier4_scenario_relocation(backend_server):

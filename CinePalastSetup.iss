@@ -5,7 +5,7 @@
 ; Eindeutige ID für die App
 AppId={{5E583391-766F-48A0-A7EA-918991D4C63E}
 AppName=CinePalast Manager
-AppVersion=2.0
+AppVersion=2.1.0
 AppPublisher=Mannis Kinopalast
 DefaultDirName={localappdata}\CinePalast Manager
 DefaultGroupName=CinePalast Manager

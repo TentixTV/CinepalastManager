@@ -706,6 +706,8 @@ class TMDBClient:
                 details["poster_url"] = poster_url
                 details["banner_url"] = banner_url
                 details["tmdb_id"] = tmdb_id
+                details["poster_pfad"] = details.get("poster_path")
+                details["banner_pfad"] = details.get("backdrop_path")
                 return details
             except Exception as e:
                 raise ValueError(f"Fehler beim Scraping der TMDb Movie-Vorschau: {e}")
@@ -766,6 +768,10 @@ class TMDBClient:
             "filmreihe": filmreihe,
             "produktionsland": produktionsland,
             "deutsche_synchronsprecher": "",
+            "poster_path": poster_path,
+            "backdrop_path": banner_path,
+            "poster_pfad": poster_path,
+            "banner_pfad": banner_path,
             "poster_url": poster_url,
             "banner_url": banner_url,
             "tmdb_id": tmdb_id
@@ -814,8 +820,8 @@ class TMDBClient:
                 jahr = details["jahr"]
                 details["deutsche_synchronsprecher"] = self.scrape_synchronsprecher(titel, jahr)
                 
-                details["poster_pfad"] = self.download_and_cache_image(details["poster_path"], tmdb_id, "poster")
-                details["banner_pfad"] = self.download_and_cache_image(details["backdrop_path"], tmdb_id, "banner")
+                details["poster_pfad"] = self.download_and_cache_image(details["poster_path"], tmdb_id, "poster", titel, jahr)
+                details["banner_pfad"] = self.download_and_cache_image(details["backdrop_path"], tmdb_id, "banner", titel, jahr)
                 
                 del details["poster_path"]
                 del details["backdrop_path"]
@@ -872,8 +878,8 @@ class TMDBClient:
             banner_path = data.get("backdrop_path")
 
             # Download images
-            poster_pfad = self.download_and_cache_image(poster_path, tmdb_id, "poster")
-            banner_pfad = self.download_and_cache_image(banner_path, tmdb_id, "banner")
+            poster_pfad = self.download_and_cache_image(poster_path, tmdb_id, "poster", titel, jahr)
+            banner_pfad = self.download_and_cache_image(banner_path, tmdb_id, "banner", titel, jahr)
 
             return {
                 "titel": titel,
@@ -915,24 +921,27 @@ class TMDBClient:
                         return cert
         return "k.A."
 
-    def download_and_cache_image(self, remote_path: Optional[str], tmdb_id: int, image_type: str) -> str:
+    def download_and_cache_image(self, remote_path: Optional[str], tmdb_id: int, image_type: str, movie_title: str = "", movie_year: Optional[int] = None) -> str:
         """
         Downloads a poster or banner image from TMDB, checks if it is already cached locally,
         and saves it to the custom media directory if configured, or default folders.
+        Always saves in PNG format with naming convention:
+        [Filmname] ([Jahr])_PT.png (poster) or [Filmname] ([Jahr])_WP.png (banner).
         """
         if not remote_path:
             return ""
 
-        extension = os.path.splitext(remote_path)[1]
-        if not extension:
-            extension = ".jpg"
+        import re
+        safe_title = re.sub(r'[\/\\\:\*\?\"\<\>\|]', '', movie_title or str(tmdb_id))
+        safe_title = " ".join(safe_title.split())
+        year_str = f" ({movie_year})" if movie_year else ""
+        suffix = "_PT" if image_type == "poster" else "_WP"
+        local_filename = f"{safe_title}{year_str}{suffix}.png"
 
         # Check if there is a custom media path
         custom_path = load_config().get("custom_media_path", "").strip()
         if custom_path and os.path.isdir(custom_path):
-            folder = os.path.join(custom_path, "posters" if image_type == "poster" else "banners")
-            os.makedirs(folder, exist_ok=True)
-            local_filename = f"{tmdb_id}{extension}"
+            folder = custom_path
             local_path = os.path.join(folder, local_filename)
         else:
             local_appdata = os.environ.get("LOCALAPPDATA")
@@ -941,7 +950,6 @@ class TMDBClient:
             else:
                 folder = os.path.join(get_app_dir(), "assets", "posters" if image_type == "poster" else "banners")
             os.makedirs(folder, exist_ok=True)
-            local_filename = f"{tmdb_id}{extension}"
             local_path = os.path.join(folder, local_filename)
 
         if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
@@ -951,11 +959,14 @@ class TMDBClient:
         download_url = f"{self.IMAGE_BASE_URL}/{size}{remote_path}"
 
         try:
-            response = requests.get(download_url, stream=True, timeout=15)
+            response = requests.get(download_url, timeout=15)
             if response.status_code == 200:
-                with open(local_path, "wb") as f:
-                    for chunk in response.iter_content(1024):
-                        f.write(chunk)
+                from PIL import Image
+                import io
+                img = Image.open(io.BytesIO(response.content))
+                if img.mode == "CMYK":
+                    img = img.convert("RGB")
+                img.save(local_path, format="PNG")
                 return local_path
         except Exception as e:
             print(f"Error downloading image {download_url}: {e}")
